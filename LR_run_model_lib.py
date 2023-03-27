@@ -67,7 +67,7 @@ def get_recommendation(stock,lookback):
     years_ago = int(lookback)
     start_date = date_n_years_ago(years_ago).strftime("%Y-%m-%d")
     end_date = None
-    df_in = yf.download('SPY',period='max',progress=False)
+    df_in = yf.download(stock,period='max',progress=False)
     # print(f"Models for: {stock}")
     # Generate the pct_change for the closing prices
     df_in_delta = df_in.copy()

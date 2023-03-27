@@ -519,6 +519,11 @@ def create_model(stock):
 
     # print("################# Saving the Models ###################")
 
+    import os
+    model_dir = './models'
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
+   
     with open(model1_fname, 'wb') as f:
         pickle.dump(best_model, f)
 

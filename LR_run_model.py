@@ -65,7 +65,7 @@ years_ago = input("Backtesting Lookback Years (1 or more) :")
 years_ago = int(years_ago)
 start_date = date_n_years_ago(years_ago).strftime("%Y-%m-%d")
 end_date = None
-df_in = yf.download('SPY',period='max')
+df_in = yf.download(stock,period='max')
 # print(f"Models for: {stock}")
 # Generate the pct_change for the closing prices
 df_in_delta = df_in.copy()
