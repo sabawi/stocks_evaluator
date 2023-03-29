@@ -740,6 +740,6 @@ def update_list_of_models(stock_list):
     
 if __name__ == "__main__":
     stock = str(input("Enter Stock Symbol : ")).upper()
-    create_model(stock=stock)
-
+    model_num = create_model(stock=stock)
+    print(f"Best model = {model_num}")
 
