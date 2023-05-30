@@ -27,7 +27,10 @@ import pytz
 def create_model(stock):
     # Load stock price data
     df_in = yf.download(stock,period='max',progress=False)
-
+    if(len(df_in)<2):
+        print(f"{stock} data not found. Skipping",end=",")
+        return 'None'
+    
 
     # ### Latest Stock Dataset from Yahoo Finance  
 
@@ -734,6 +737,7 @@ def update_list_of_models(stock_list):
     ret_list = []
     for s in stock_list:
         s = str(s).upper()
+        print(s,end=",")
         ret_list.append(create_model(stock=s))
     
     return ret_list

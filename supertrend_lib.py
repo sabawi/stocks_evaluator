@@ -166,7 +166,10 @@ def implement_st_strategy(prices, st):
 # # START ANALYSIS
 def supertrend(stock,start_date):
     stock_data = get_historical_data(stock, start_date).tz_localize(None)
-
+    if(len(stock_data)<2):
+        print(f"{stock} data not found. Skipping",end=",")
+        return None, None, None, None, stock_data
+    
     # print(stock_data)
     Lookback = 15 # in days
     Multiplier = 3
