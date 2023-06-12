@@ -118,6 +118,33 @@ def calculate_beta(stock_data, market="^GSPC", strPeriod="3y") -> float:
 
     return beta, market_data
 
+
+def calculate_sharpe_ratio(risk_free_rate, average_return, standard_deviation):
+    excess_return = average_return - risk_free_rate
+    sharpe_ratio = excess_return / standard_deviation
+    return sharpe_ratio
+
+def sharpe_ratio(stock_data, risk_free_rate) -> float:
+
+    import math 
+    
+    # Calculate the stock's returns
+    stock_returns = stock_data['returns']
+    ave_returns_daily = np.mean(stock_returns)
+    # print(f"\tAverage Return for the period = {round(ave_returns_daily*100,5)}%")
+    sigma = np.std(stock_returns)
+    # print(f"\tStandard Deviation for the period = {round(sigma,5)}")
+    
+    # Convert risk-free rate to daily rate
+    daily_risk_free_rate = math.pow(1 + risk_free_rate, 1/252) - 1
+    # print(f"\tDaily Risk Free Rate = {round(daily_risk_free_rate*100,5)}%")
+
+    # Calculate Sharpe ratio
+    sharpe_ratio = calculate_sharpe_ratio(daily_risk_free_rate, ave_returns_daily, sigma)
+
+    return sharpe_ratio
+
+
 def CAPM_VaR(stock_data,market_data, bond_mat_duration,stock_beta):
     # print("************************************************************************************")
     # print("********  Capital Asset Pricing Model (CAPM) & Value at Risk (VaR) Analysis ********")
@@ -241,8 +268,10 @@ def CAPM_VaR(stock_data,market_data, bond_mat_duration,stock_beta):
 
     var_cov_pct, var_cov_dol = var_covariance(stock_data.Close.iloc[-1], 1, std_dev_return, confidence_level)
 
-
-    return round(expected_return*100,2), round(-1 * var_mc_pct*100,2)
+    # Calculate the Sharpe Ratio for the stock
+    sharp_ratio = sharpe_ratio(stock_data, risk_free_rate)
+    # print(f"\nSharpe Ratio for {stock_symbol} Stock: {round(sharp_ratio,5)*100}%")
+    return round(expected_return*100,2), round(-1 * var_mc_pct*100,2), round(sharp_ratio*100,5)
 
 if __name__ == "__main__":
     import sbeta_lib as sbeta
@@ -254,10 +283,10 @@ if __name__ == "__main__":
         return start_date.strftime("%Y-%m-%d")
     
     stock_symbol = 'aapl'
-    mat_period = 2
+    mat_period = 5
     
-    stock_data = yf.download(stock_symbol, period=f"{mat_period}y")
+    stock_data = yf.download(stock_symbol, period=f"{mat_period}y",progress=False)
     beta, market_data = sbeta.get_beta(stock_data)
-    CAPM, VaR = CAPM_VaR(stock_data=stock_data,market_data=market_data,bond_mat_duration = mat_period,stock_beta=beta)
+    CAPM, VaR,Sharpe = CAPM_VaR(stock_data=stock_data,market_data=market_data,bond_mat_duration = mat_period,stock_beta=beta)
     
-    print(CAPM,VaR)
+    print(CAPM,VaR,Sharpe)
