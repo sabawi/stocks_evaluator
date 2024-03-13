@@ -25,9 +25,13 @@ plt.rcParams['figure.figsize'] = (20,10)
 
 
 def get_historical_data(symbol, start_date):
-    # df = yf.Ticker(symbol).history(interval="1d", start=start_date, end=datetime.now())
-    df = yf.download(symbol, start=start_date, end=datetime.now(), interval='1d',progress=False)
-    return df
+    return yf.download(
+        symbol,
+        start=start_date,
+        end=datetime.now(),
+        interval='1d',
+        progress=False,
+    )
 
 
 # # SUPERTREND CALCULATION

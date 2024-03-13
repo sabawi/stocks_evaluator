@@ -1,1 +1,1 @@
-qqq,aapl, msft, nvda, amd, intc, meta, ibm, qcom, mu, tsla, spy, stx, googl, amzn, sq, coin,mrvl, orcl, nflx,pltr, avgo, de, cdns, adbe,now,smci,klac,tsm,asml,lrcx,on,txn,amat, jbl, adi,mchp, swks,hon,dia,panw
+qqq,aapl, msft, nvda, amd, intc, meta, ibm, qcom, mu, tsla, spy, stx, googl, amzn, sq, coin,mrvl, orcl, nflx,pltr, avgo, de, cdns, adbe,now,smci,klac,tsm,asml,lrcx,on,txn,amat, jbl, adi,mchp, swks,hon,dia,panw,cvs,txt,ldos,gd,nclh,ccl,rcl,cost
