@@ -23,6 +23,26 @@ plt.rcParams['figure.figsize'] = (20,10)
 
 # In[395]:
 
+from datetime import datetime, timedelta
+
+def get_time_difference(past_date):
+    # Convert the past date string to a datetime object
+    past_date = datetime.strptime(past_date, '%Y-%m-%d')
+
+    # Get the current date
+    current_date = datetime.now()
+
+    # Calculate the difference between the current date and the past date
+    time_difference = current_date - past_date
+
+    # Calculate the number of years, months, weeks, and days
+    years = time_difference.days // 365
+    months = time_difference.days // 30
+    weeks = time_difference.days // 7
+    days = time_difference.days
+
+    return years, months, weeks, days
+
 
 def get_historical_data(symbol, start_date):
     return yf.download(
@@ -258,6 +278,8 @@ def supertrend(stock,start_date):
             tmp_df = pd.DataFrame(dic)
             only_buysell_signals_df=pd.concat([only_buysell_signals_df,tmp_df])
     only_buysell_signals_df.set_index("Date",inplace=True)
+    past_date = only_buysell_signals_df.index[-1]
+    styears, stmonths, stweeks, stdays = get_time_difference(past_date)
 
     # print(only_buysell_signals_df)
     # print('Number of Signals =',len(only_buysell_signals_df))
@@ -338,7 +360,7 @@ def supertrend(stock,start_date):
     #     print(cl('                         LOSING STRATEGY                         ', attrs=['bold']))
     # print(    cl('*****************************************************************', attrs=['bold']))
 
-    return winner_strategy, last_signal, last_signal_date, round(stock_data.iloc[-1].Close,2), stock_data
+    return winner_strategy, last_signal, last_signal_date, round(stock_data.iloc[-1].Close,2), stock_data, stdays
 
 if __name__ == "__main__":
     w,s,d,close,stock_data = supertrend('AAPL','2020-01-01')
