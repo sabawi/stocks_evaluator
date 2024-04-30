@@ -119,7 +119,13 @@ def process_data(cursor):
             
         sell_portfolio = set(current_portfolio) - set(today_portfolio)
 
-
+    # If there are stocks to sell from the last pass, sell them now
+    for sell_stock in sell_portfolio:
+        print(f"SELL: {sell_stock} on {processing_date}")
+            
+        # Create a TradeRecord object
+        transact("Sell", processing_date, sell_stock, "Sell at the next open")          
+            
     print("\n************************************************************")
     print(f"FINAL Portfolio : {today_portfolio}")   
     print("************************************************************")
