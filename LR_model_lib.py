@@ -28,7 +28,7 @@ def create_model(stock):
     # Load stock price data
     df_in = yf.download(stock,period='max',progress=False)
     if(len(df_in)<2):
-        print(f"{stock} data not found. Skipping",end=",")
+        print(f"{stock} data not found. Skipping",end=",",flush=True)
         return 'None'
     
 
@@ -625,8 +625,8 @@ def create_model(stock):
         
         print_details = False
         if print_details:
-            print("\n")
-            print(f"First Day Share Price = ${round(first_day_open,2)}")
+            print("\n",flush=True)
+            print(f"First Day Share Price = ${round(first_day_open,2)}",flush=True)
             print(f"Buy {number_of_shares} on {start_date}")
             print(f"Cost of Shares = ${cost_of_shares}")
             print(f"Remaining Cash Balance = {cash_balance}")
@@ -737,7 +737,7 @@ def update_list_of_models(stock_list):
     ret_list = []
     for s in stock_list:
         s = str(s).upper()
-        print(s,end=",")
+        print(s,end=",",flush=True)
         ret_list.append(create_model(stock=s))
     
     return ret_list

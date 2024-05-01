@@ -986,3 +986,4 @@ def build_sp500_companies_database():
 # ret = df_to_html_file(sp_df,"/var/www/html/home/viewable_pages/sp500_companies_info.php","SP500 Companies Information") 
 # sp_df.tail(50)
 
+print("Run Completed")
