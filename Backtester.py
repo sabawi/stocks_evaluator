@@ -258,4 +258,56 @@ class SignalsBacktester:
         print(tran_history)
 
 if __name__ == "__main__":
-    pass
+    # pass
+    in_stock = input("Enter stock symbol : ").strip().upper()
+    instock_list = [in_stock]
+    
+    # Define dates and corresponding buy signals (True/False)
+
+    # Download End-of-day stock prices from Yahoo Finance API
+    import yfinance as yf
+    
+    # Set the starting stock market date
+    start_date = '2024-04-08'
+    
+    # Download the prices
+    df_prices = yf.download(in_stock,start=start_date,interval='1d',progress=False)
+    
+    # Create a dictionary with dates as keys and buy signals as values
+    dates = df_prices.index
+    buy_signals = {date: 0 for date in df_prices.index} 
+    
+    # Create a prediction dataframe combining the price with the signals
+    df_pred = pd.DataFrame(buy_signals.items(), columns=['Date', 'Predicted'])
+    df_pred.set_index('Date', inplace=True)
+    
+    # Sample signals dataframe 
+    df_pred['Predicted']['2024-04-09']=0 # Sell
+    df_pred['Predicted']['2024-04-10']=1 # Buy
+    df_pred['Predicted']['2024-04-11']=1 # Buy
+    df_pred['Predicted']['2024-04-12']=1 # Buy
+    df_pred['Predicted']['2024-04-15']=0 # Sell
+    df_pred['Predicted']['2024-04-25']=1 # Buy
+    df_pred['Predicted']['2024-04-26']=1 # Buy
+    df_pred['Predicted']['2024-04-27']=1 # Buy
+    df_pred['Predicted']['2024-04-28']=1 # Buy
+    df_pred['Predicted']['2024-04-29']=1 # Buy
+    df_pred['Predicted']['2024-04-30']=1 # Buy
+    df_pred['Predicted']['2024-05-01']=1 # Buy
+    df_pred['Predicted']['2024-05-02']=1 # Buy
+    df_pred['Predicted']['2024-05-03']=1 # Buy
+    df_pred['Predicted']['2024-05-04']=0 # Sell
+    
+    # Shift the Buy signals data by 1 day forward if the buying will happen the next day's open price
+    # df_pred = df_pred.shift(1).fillna(0)
+    
+    print(df_pred)
+    print(df_prices)
+    
+    # Run backtesting on the model to verify the results
+    backtest = SignalsBacktester(df_in=df_prices, signals=df_pred, start_date=start_date, end_date=None, amount=100000)
+    backtest.run()
+    tran_history = backtest.get_tran_history()
+    print(tran_history)
+    backtest.results()
+    backtest.plot_account(f"{in_stock} Backtest since {start_date}")
