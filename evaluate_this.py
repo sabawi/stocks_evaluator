@@ -629,7 +629,7 @@ fname = f'{results_dir}/Eval_Results_{datetime.datetime.today().strftime("%Y_%m_
 # ### Evaluate Stocks List
 
 # %%
-regenerate_models = True
+regenerate_models = False
 # symbols_file = os.path.dirname(__file__)+'/stocks_portfolio.txt'
 # symbols_file = os.path.dirname(__file__)+'/stocks_list.txt'
 symbols_file = os.path.dirname(__file__)+'/stocks_list2.txt' ## Inclusive of NASDAQ 100

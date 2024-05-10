@@ -27,7 +27,7 @@ class SignalsBacktester:
         """
         self.df_in = df_in
         self.signals = pd.DataFrame(signals,columns=['Predicted'],index=self.df_in.index)
-        self.print_details = False
+        self.print_details = True
         self.amount = amount
         self.tran_history = None
         
@@ -41,6 +41,9 @@ class SignalsBacktester:
             self.end_date = self.next_business_day(end_date)   
         else:
             self.end_date = self.df_in.index[-1].strftime("%Y-%m-%d")
+            
+        # print(f"Start Business Date = {self.start_date}")
+        # print(signals)
             
     def set_print_details(self,print_details):
         self.print_details = print_details
@@ -78,13 +81,20 @@ class SignalsBacktester:
         # df_transactions.fillna(method='ffill')
         # print(df_transactions)
         
-        df_transactions.iloc[0].Running_Balance = self.amount
-        for i in range(1,len(df_bt)):
-            df_transactions.iloc[i].Running_Balance = df_transactions.iloc[i-1].Running_Balance
-            df_transactions.iloc[i].Shares_Count = df_transactions.iloc[i-1].Shares_Count
+        # df_transactions.iloc[0].Running_Balance = self.amount
+        for i in range(0,len(df_bt)):
+            
+            if i == 0:
+                df_transactions.iloc[i].Running_Balance = self.amount
+                df_transactions.iloc[i].Shares_Count = 0
+            else:
+                df_transactions.iloc[i].Running_Balance = df_transactions.iloc[i-1].Running_Balance
+                df_transactions.iloc[i].Shares_Count = df_transactions.iloc[i-1].Shares_Count
+            
+            # print(f"df_bt.iloc[i-1] , date {df_bt.iloc[i-1]}, predicted {df_bt.iloc[i-1].Predicted}")
             
             # print(i, df_transactions.iloc[i].Running_Balance)
-            if df_bt.iloc[i-1].Predicted == 1.0:
+            if df_bt.iloc[i].Predicted == 1.0:
                 shares_to_buy = int(df_transactions.iloc[i].Running_Balance / df_bt.iloc[i].Open)
                 if(shares_to_buy > 0):
                     cost_of_shares = round(shares_to_buy * df_bt.iloc[i].Open,2)
@@ -93,7 +103,7 @@ class SignalsBacktester:
                     df_transactions.iloc[i].Running_Balance = df_transactions.iloc[i].Running_Balance - cost_of_shares
                     # print(df_transactions.iloc[i+1].Running_Balance)
                     df_transactions.iloc[i].Shares_Count = int(shares_to_buy + df_transactions.iloc[i].Shares_Count)
-            if df_bt.iloc[i-1].Predicted == 0.0:
+            if df_bt.iloc[i].Predicted == 0.0:
                 if df_transactions.iloc[i].Shares_Count > 0:
                     proceeds_of_sale = round(df_transactions.iloc[i].Shares_Count * df_bt.iloc[i].Open,2)
                     df_transactions.iloc[i].Sell_Amount = proceeds_of_sale
@@ -106,12 +116,13 @@ class SignalsBacktester:
                                                     (df_transactions.iloc[i].Shares_Count *  df_bt.iloc[i].Close),2)
             df_transactions.iloc[i].ROI_pcnt = round( ((df_transactions.iloc[i].Account_Value/self.amount) -1)*100,2)
             
+            # print(f" {df_transactions.index[i]}")
         self.set_tran_history(df_transactions)
         
         # df_bt = df_bt.join(df_transactions, how='outer').fillna(method='ffill')
         df_bt = df_bt.join(df_transactions, how='outer')
         
-        # print(df_buy)
+        # print("df_bt",df_bt)
         return df_bt
 
     def next_business_day(self,date_str, country="US"):
@@ -207,13 +218,21 @@ class SignalsBacktester:
 
     def results(self):
         tran_history = self.get_tran_history()
-
+        # print(f"Number of Buys : {tran_history['Buy_Count'].sum()}")
+        # print(f"tran_history: \n Buy Count:{tran_history.Buy_Count>0}\n{tran_history}")
         max_account_value = tran_history[(tran_history['Account_Value'] == tran_history['Account_Value'].max())]
-        first_buy = tran_history[(tran_history.Buy_Count>0)].index[0].strftime("%Y-%m-%d")
+        if tran_history['Buy_Count'].sum() > 0:
+            first_buy = tran_history[(tran_history['Buy_Count']>0)].index[0].strftime("%Y-%m-%d")
+        else:
+            first_buy = 'None'
         buys = len(tran_history[tran_history['Buy_Count']>0])
         sells = len(tran_history[tran_history['Sell_Count']>0])
         days_bought_or_sold = tran_history[(tran_history['Buy_Count'] > 0) | (tran_history['Sell_Count'] > 0)]
 
+        # If no transactions, exit now else show transaction table
+        if buys == 0 :
+            return
+        
         print(cl("************************************************************",attrs=['bold']))
         print(cl("**                        RESULTS                         **",attrs=['bold'],on_color='on_blue'))       
         print(cl("************************************************************",attrs=['bold']))
@@ -233,6 +252,10 @@ class SignalsBacktester:
         print(f"\nHighest ROI (Max % Return) was on {highest_ROI.index[0].strftime('%Y-%m-%d')} : {highest_ROI.iloc[0].ROI_pcnt}%")
         print(f"Lowest ROI (Max % Drawdown) was on {max_drawdown.index[0].strftime('%Y-%m-%d')} : {max_drawdown.iloc[0].ROI_pcnt}%")
 
+        print(cl("************************************************************",attrs=['bold']))
+        print(cl("**                   TRANSACTION TABLE                    **",attrs=['bold'],on_color='on_blue')) 
+        print(cl("************************************************************",attrs=['bold']))
+        print(tran_history)
 
 if __name__ == "__main__":
     pass

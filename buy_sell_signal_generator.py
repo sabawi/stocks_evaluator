@@ -2,8 +2,57 @@ import sqlite3
 from datetime import date, datetime
 import pandas as pd
 from tabulate import tabulate
+from Backtester import SignalsBacktester as bt
+import yfinance as yf
 
 transact_record = []
+
+def add_data(data, date, symbols):
+  """
+  Adds a new entry to the provided data dictionary with the date and stock symbols set.
+  If the date already exists, it appends the new symbols to the existing set.
+
+  Args:
+      data: A dictionary to store date and stock symbol sets.
+      date: The date as a string in YYYY-MM-DD format.
+      symbols: A list of stock symbols.
+  """
+  if date not in data:
+    data[date] = {symbols}
+  else:
+    data[date].update({symbols})  # Update with new symbols using set(symbols)
+
+
+def make_buys_df(data):
+    """
+  Converts the provided data dictionary to a Pandas DataFrame with columns 'Date' and 'Stock'.
+
+  Args:
+      data: A dictionary containing date and stock symbol sets.
+
+  Returns:
+      A Pandas DataFrame.
+  """
+  
+    if not data:
+        df = pd.DataFrame(columns=['Date', 'Stock'])  # Return empty DataFrame
+        df = df.set_index('Date')
+    else:
+        # print(data)
+        df = pd.DataFrame(data)
+        
+    return df
+
+# Example usage
+# data = {}
+# add_data(data, "2024-04-12", ["GOOG", "IBM"])
+# add_data(data, "2024-04-15", ["AAPL", "MSFT"])
+# add_data(data.copy(), "2024-04-12", ["AAPL"])  # Avoid modifying original data
+
+# Create the DataFrame with a copy to prevent unintended modification
+# df = create_dataframe(data.copy())
+
+# print(df)
 
 class TradeRecord:
   def __init__(self, transact, date, stock, note):
@@ -135,7 +184,7 @@ def process_data(cursor):
 def main():
     """Main function to connect, query, and process data"""
     db_file = "data.db"  # Replace with your actual database filename
-    sql_statement = """
+    BuyBuyBuy = """
         select "Last Run", "Stock" , "Last Price" 
         from stock_data 
         where "LR Next_Day Recomm" = "Buy,Buy,Buy" 
@@ -145,6 +194,22 @@ def main():
         ORDER BY "Last Run";
     """
 
+    SMA_X_Supertrend_Winner = """
+        select "Last Run", "Stock" , "Last Price" 
+        from stock_data 
+        where "Supertrend Winner"=1 
+        and "Supertrend Result"="Buy" 
+        and "SMA Crossed_Up" = "Buy" 
+        ORDER BY "Last Run";
+    """
+
+    # Set sql_statement to one of the SQL queries defined above
+    # sql_statement = SMA_X_Supertrend_Winner 
+    sql_statement = BuyBuyBuy
+    
+    
+    data = {}
+    
     conn = connect_db(db_file)
     cursor = query_data(conn, sql_statement)
     process_data(cursor)
@@ -157,6 +222,7 @@ def main():
         if record.date != old_date:
             print(f"On {record.date} :")
         print(f"\t{record.transact} {record.stock} ")
+        add_data(data,record.date,f"{record.stock}")
         old_date = record.date
 
     records = []
@@ -170,10 +236,72 @@ def main():
         records.append(record_dict)
 
     # Assuming 'data' is the list of dictionaries from previous examples
-    df = pd.DataFrame(records)
-
+    transact_df = pd.DataFrame(records)
+    print(tabulate(transact_df, headers=transact_df.columns, tablefmt="grid"))
+    
+    # Convert dictionary to list of records (tuples)
+    items = [(date, list(symbols)) for date, symbols in data.items()]
+    buy_stocks_df = pd.DataFrame(items,columns=['Date','Stock'])
+    buy_stocks_df = buy_stocks_df.set_index('Date')
+    # print(buy_stocks_df)
     # Print the DataFrame
-    # print(tabulate(df, headers=df.columns, tablefmt="grid"))
+    # print(tabulate(buy_stocks_df, headers=buy_stocks_df.columns, tablefmt="grid"))
+    pd.set_option('display.max_colwidth', None)
+    
+    print(buy_stocks_df)
 
+    in_stock = input("Enter stock symbol : ").strip().upper()
+    instock_list = [in_stock]
+    # print("Target = ", instock_list)
+
+    # Create a Series with 0s (assuming all dates initially don't have the stock)
+    buy_alerts = pd.Series(0, index=buy_stocks_df.index)
+
+    start_date = buy_alerts.index[0]
+    # print(f"Alert start Date {start_date}")
+    df_prices = yf.download(in_stock,start=start_date,interval='1d',progress=False)
+    
+    # print(df_prices)
+    for i, row in buy_stocks_df.iterrows():
+        # print(i,row["Stock"])
+        if in_stock in row['Stock']:
+            buy_alerts.loc[i] = 1
+            # next_date_index = buy_alerts.index.get_loc(i) + 1  # Assuming index is a date object
+            
+            
+            # if next_date_index < len(buy_alerts):  # Check if next index exists
+            #     buy_alerts.loc[buy_alerts.index[next_date_index]] = 1
+                # print(f"buy {in_stock} the next day {buy_alerts.index[next_date_index]} open")
+                
+        # if buy_alerts[i]:
+            # print(f"{i} BUY {in_stock} at ${round(df_prices['Open'].loc[i],2)}")
+            # print(f"{i} BUY {in_stock} ")
+        
+    buy_alerts_original = buy_alerts.copy()
+    buy_alerts = buy_alerts.shift(1).fillna(0)
+    # print("Buy Alerts ",buy_alerts)
+    df_pred = pd.DataFrame(buy_alerts,columns=['Predicted'],index=buy_alerts_original.index)
+
+    # Run backtesting on the model to verify the results
+    backtest = bt(df_in=df_prices, signals=df_pred, start_date=start_date, end_date=None, amount=100000)
+    backtest.run()
+    tran_history = backtest.get_tran_history()
+    # print(tran_history)
+    backtest.results()
+    backtest.plot_account(f"{in_stock} Backtest since {start_date}")
+
+
+
+    # buy_alerts = buy_alerts.shift(1).fillna(0)
+    # print(buy_alerts)
+    
+    # df_pred = pd.DataFrame(buy_alerts,columns=['Predicted'],index=df_lagged.index)
+
+    # # Run backtesting on the model to verify the results
+    # backtest = bt(df_in=df_in, signals=df_pred, start_date=start_date, end_date=None, amount=100000)
+    # backtest.run()
+    # tran_history = backtest.get_tran_history()
+    
+    
 if __name__ == "__main__":
   main()
