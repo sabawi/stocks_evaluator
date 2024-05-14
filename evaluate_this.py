@@ -756,12 +756,12 @@ send_email(recipient=recipient_email, subject=email_subject, body=email_body_htm
 
 # %%
 time.sleep(0.5)
-buys_eval_df= screen_for_buys(eval_df=eval_df,ignore_supertrend_winners=True)
-buys_eval_df = buys_eval_df.sort_values(by='SMA_X_Date', ascending=False).sort_values('%Sharpe Ratio',ascending=True).sort_values('Daily VaR',ascending=False)
-print(f"{len(buys_eval_df)} Stocks:",flush=True)
-print(','.join(buys_eval_df['Stock'].astype(str)),flush=True)
-display(HTML(buys_eval_df.to_html(index=False)))
-ret = df_to_html_file(buys_eval_df,"/var/www/html/home/viewable_pages/buybuybuy2.php","Buy, Buy, Buy Rated Stocks (Not necessarily ST winners)") 
+buys_eval_df2= screen_for_buys(eval_df=eval_df,ignore_supertrend_winners=True)
+buys_eval_df2 = buys_eval_df2.sort_values(by='SMA_X_Date', ascending=False).sort_values('%Sharpe Ratio',ascending=True).sort_values('Daily VaR',ascending=False)
+print(f"{len(buys_eval_df2)} Stocks:",flush=True)
+print(','.join(buys_eval_df2['Stock'].astype(str)),flush=True)
+display(HTML(buys_eval_df2.to_html(index=False)))
+ret = df_to_html_file(buys_eval_df2,"/var/www/html/home/viewable_pages/buybuybuy2.php","Buy, Buy, Buy Rated Stocks (Not necessarily ST winners)") 
 
 # %% [markdown]
 # ### Save the Buys

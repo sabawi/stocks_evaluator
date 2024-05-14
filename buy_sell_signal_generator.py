@@ -179,8 +179,86 @@ def process_data(cursor):
     print(f"FINAL Portfolio : {today_portfolio}")   
     print("************************************************************")
                     
+def query_distinct_dates(conn, table_name):
+    """
+    Queries a database table and returns distinct values in the specified date column, 
+    ordered by date in ascending order.
 
+    Args:
+        conn (sqlite3.Connection): The connection object to the database.
+        table_name (str): The name of the table to query.
+        date_column (str): The name of the column containing date values.
 
+    Returns:
+        list: A list of distinct date strings ordered by date.
+    """
+    cursor = conn.cursor()
+
+    # Use strftime('%Y-%m-%d') to format dates consistently for comparison
+    # Adapt the format string if your dates are stored differently
+    sql_statement = f"""
+        SELECT DISTINCT "Last Run" 
+        FROM {table_name} 
+        ORDER BY 'Last Run' ASC;
+    """
+
+    cursor.execute(sql_statement)
+    results = cursor.fetchall()
+  
+    # Extract only the date strings from the results
+    distinct_dates = [row[0] for row in results]
+    return distinct_dates
+
+def get_eval_by_date(conn, datestr):
+    """
+    Queries the database for rows in the 'stock_data' table where the 'Last Run' 
+    column matches the provided date string and returns a pandas DataFrame.
+
+    Args:
+        conn (sqlite3.Connection): The connection object to the database.
+        datestr (str): The date string to filter by (format should match 'Last Run' column).
+
+    Returns:
+        pandas.DataFrame: A DataFrame containing the matching rows from the table, 
+                            or an empty DataFrame if no data is found.
+    """
+    cursor = conn.cursor()
+
+    sql_statement = f"""
+        SELECT * FROM stock_data 
+        WHERE "Last Run" = ?;
+    """
+
+    cursor.execute(sql_statement, (datestr,))  # Use tuple for parameter substitution
+    results = cursor.fetchall()
+
+    # Check if any results were found
+    if results:
+        # Convert results to a DataFrame using column names from cursor description
+        df = pd.DataFrame(results, columns=[desc[0] for desc in cursor.description])
+    else:
+        # Return an empty DataFrame if no data is found
+        df = pd.DataFrame()
+
+    return df
+
+def screen_for_buys(eval_df, ignore_supertrend_winners=False):
+        if not ignore_supertrend_winners:
+                buys_df = eval_df[ (eval_df['Supertrend Winner']==True) &  
+                        (eval_df['Supertrend Result']=='Buy') & 
+                        (eval_df['LR Next_Day Recomm'] == 'Buy,Buy,Buy') &
+                        (eval_df['SMA Crossed_Up']=='Buy')].sort_values(by=['Supertrend Winner','Supertrend Result',
+                                                                            'ST Signal_Date','SMA Crossed_Up','SMA_X_Date'],
+                                                                        ascending=[False,True,False,True,False])
+        else:
+                buys_df = eval_df[ (eval_df['Supertrend Result']=='Buy') & 
+                        (eval_df['LR Next_Day Recomm'] == 'Buy,Buy,Buy') &
+                        (eval_df['SMA Crossed_Up']=='Buy')].sort_values(by=['Supertrend Winner','Supertrend Result',
+                                                                            'ST Signal_Date','SMA Crossed_Up','SMA_X_Date'],
+                                                                        ascending=[False,True,False,True,False])            
+        
+        return buys_df
+    
 def main():
     """Main function to connect, query, and process data"""
     db_file = "data.db"  # Replace with your actual database filename
@@ -202,15 +280,74 @@ def main():
         and "SMA Crossed_Up" = "Buy" 
         ORDER BY "Last Run";
     """
+    All_Roads_Lead_UP_Safe = """
+        select "Last Run", "Stock" , "Last Price" 
+        from stock_data 
+        where "Supertrend Winner"=1 
+        and "Supertrend Result"="Buy" 
+        and "SMA Crossed_Up" = "Buy" 
+        ORDER BY "Last Run";
+    """
 
     # Set sql_statement to one of the SQL queries defined above
-    # sql_statement = SMA_X_Supertrend_Winner 
-    sql_statement = BuyBuyBuy
+    sql_statement = BuyBuyBuy 
     
     
     data = {}
     
     conn = connect_db(db_file)
+    distinct_dates = query_distinct_dates(conn,'stock_data')
+    
+    datestr = '2024-05-10'
+    df_evaluation = get_eval_by_date(conn, datestr)
+    
+    # Buy Buy and More Buy
+    buys_eval_df= screen_for_buys(eval_df=df_evaluation,ignore_supertrend_winners=False)
+    buys_eval_df = buys_eval_df.sort_values('Daily VaR',ascending=False).sort_values('%Sharpe Ratio',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
+    
+    print("\nBUYS, BUYS, and more BUYS")
+    print("=========================")
+    print(f"{len(buys_eval_df)} Stocks:",flush=True)
+    sublist = ','.join(buys_eval_df['Stock'].astype(str))
+    print(sublist,flush=True)
+    print(buys_eval_df)
+
+    # Buy Buy and More Buy (Not necessarily ST winners)
+    buys_eval_df2= screen_for_buys(eval_df=df_evaluation,ignore_supertrend_winners=True)
+    buys_eval_df2 = buys_eval_df.sort_values('Daily VaR',ascending=False).sort_values('%Sharpe Ratio',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
+    
+    print("\nBUYS, BUYS, and more BUYS (Not necessarily ST winners)")
+    print("=========================")
+    print(f"{len(buys_eval_df2)} Stocks:",flush=True)
+    sublist_ = ','.join(buys_eval_df2['Stock'].astype(str))
+    print(sublist_,flush=True)
+    print(buys_eval_df2)
+
+
+    # All Roads Lead to UP & Safe
+    buys_safe = buys_eval_df[(buys_eval_df['Beta']>0.8) & (buys_eval_df['Beta']<2) ].sort_values(by='SMA_X_Date', ascending=False).sort_values('Daily VaR',ascending=False)
+
+    print("\nAll Roads Lead to UP & Safe")
+    print("======================++===")    
+    print(f"{len(buys_safe)} Stocks:",flush=True)
+    print(','.join(buys_safe['Stock'].astype(str)),flush=True)
+
+    # print(sublist,flush=True)
+    print(buys_safe)
+
+    # SMA Crossed and in Supertrend & Winner
+    Crossed_up = df_evaluation[(df_evaluation['SMA Crossed_Up'] == 'Buy') & (df_evaluation['Supertrend Result'] == 'Buy') & (df_evaluation['Supertrend Winner'] == True) ].sort_values('SMA_X_Date', ascending=False)
+    sublist2 = ','.join(Crossed_up['Stock'].astype(str))
+    
+    print("\nSMA Crossed and in Supertrend & Winner")
+    print("=====================+++++++++++++====")
+    print(sublist2,flush=True)
+    print(Crossed_up)
+    
+    # print(df_evaluation)
+    print(distinct_dates)
+    return
+    
     cursor = query_data(conn, sql_statement)
     process_data(cursor)
     conn.close()
@@ -245,10 +382,8 @@ def main():
     buy_stocks_df = buy_stocks_df.set_index('Date')
     # print(buy_stocks_df)
     # Print the DataFrame
-    # print(tabulate(buy_stocks_df, headers=buy_stocks_df.columns, tablefmt="grid"))
-    pd.set_option('display.max_colwidth', None)
-    
-    print(buy_stocks_df)
+    print(tabulate(buy_stocks_df, headers=buy_stocks_df.columns, tablefmt="grid"))
+
 
     in_stock = input("Enter stock symbol : ").strip().upper()
     instock_list = [in_stock]
