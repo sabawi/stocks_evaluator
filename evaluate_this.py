@@ -180,7 +180,7 @@ def make_text_clickable(in_df, column_name, linktext, replace_text):
     for index,row in in_df.iterrows():
         old_text = out_df.loc[index,column_name]
         new_text = linktext.replace(replace_text, old_text)
-        new_text = f"<a href='{new_text}'>{old_text}</a>"
+        new_text = f"<a href='{new_text}'  target='_blank' title='{old_text} External Link'>{old_text}</a>"
         out_df.loc[index,column_name] = new_text
         
     return out_df
@@ -629,7 +629,7 @@ fname = f'{results_dir}/Eval_Results_{datetime.datetime.today().strftime("%Y_%m_
 # ### Evaluate Stocks List
 
 # %%
-regenerate_models = False
+regenerate_models = True
 # symbols_file = os.path.dirname(__file__)+'/stocks_portfolio.txt'
 # symbols_file = os.path.dirname(__file__)+'/stocks_list.txt'
 symbols_file = os.path.dirname(__file__)+'/stocks_list2.txt' ## Inclusive of NASDAQ 100

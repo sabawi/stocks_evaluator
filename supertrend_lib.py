@@ -18,6 +18,17 @@ import yfinance as yf
 plt.style.use('fivethirtyeight')
 plt.rcParams['figure.figsize'] = (20,10)
 
+import warnings
+from functools import wraps
+
+def suppress_warnings(func):
+  """Decorator to suppress warnings within a function."""
+  @wraps(func)
+  def wrapper(*args, **kwargs):
+    with warnings.catch_warnings():
+      warnings.filterwarnings("ignore", category=FutureWarning)
+      return func(*args, **kwargs)
+  return wrapper
 
 # # EXTRACTING DATA
 
@@ -188,6 +199,7 @@ def implement_st_strategy(prices, st):
 
 
 # # START ANALYSIS
+@suppress_warnings
 def supertrend(stock,start_date):
     stock_data = get_historical_data(stock, start_date).tz_localize(None)
     if(len(stock_data)<2):
@@ -363,8 +375,8 @@ def supertrend(stock,start_date):
     return winner_strategy, last_signal, last_signal_date, round(stock_data.iloc[-1].Close,2), stock_data, stdays
 
 if __name__ == "__main__":
-    w,s,d,close,stock_data = supertrend('AAPL','2020-01-01')
-    print(w,s,d,close)
+    w,s,d,close,stock_data,stdays = supertrend('AAPL','2020-01-01')
+    print(f"Winner:{w}\nLast Signal:{s},\nLast Signal Date:{d},\nStock Data:{close},\nDays in Supertrend:{stdays}")
 
 
 

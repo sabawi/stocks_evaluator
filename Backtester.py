@@ -9,6 +9,18 @@ from datetime import datetime
 import pytz
 import holidays
 from termcolor import colored as cl
+import warnings
+from functools import wraps
+
+
+def suppress_warnings(func):
+  """Decorator to suppress warnings within a function."""
+  @wraps(func)
+  def wrapper(*args, **kwargs):
+    with warnings.catch_warnings():
+      warnings.filterwarnings("ignore", category=FutureWarning)
+      return func(*args, **kwargs)
+  return wrapper
 
 
 class SignalsBacktester:
@@ -70,6 +82,7 @@ class SignalsBacktester:
 
         return df.loc[(df.index >= start) & (df.index <= end)].copy()
 
+    @suppress_warnings
     def backtest(self):
 
         df_bt = self.df_in.join(self.signals, how='outer').fillna(method='ffill')
@@ -164,6 +177,33 @@ class SignalsBacktester:
         
         return buy_and_hold_ROI, account_value
 
+    def buy_and_hold_strategy_html(self):
+        # df_prices ,start_date=None, end_date=None, amount=100000
+        # Buy and hold
+        output = ''
+        first_day_open = round(self.df_in.loc[self.start_date].Open,2)
+        number_of_shares = int(self.amount/first_day_open)
+        cost_of_shares = round(first_day_open * number_of_shares,2)
+        cash_balance = round(self.amount - cost_of_shares,2)
+        value_of_shares_last_day = round(number_of_shares * self.df_in.iloc[-1].Close,2)
+        account_value = round(cash_balance+value_of_shares_last_day,2)
+        buy_and_hold_ROI = round( ( float(account_value/self.amount) - 1.0)*100 ,2)
+        last_day_close_price = round(self.df_in.iloc[-1].Close,2)
+        
+        if self.print_details:
+            output += ("<br>")
+            output += (f"First Day Share Price = ${round(first_day_open,2)}<br>")
+            output += (f"Buy {number_of_shares} on {self.start_date}<br>")
+            output += (f"Cost of Shares = ${cost_of_shares}<br>")
+            output += (f"Remaining Cash Balance = {cash_balance}<br>")
+            output += (f"Value of share on {self.df_in.index[-1]} = {value_of_shares_last_day}<br>")
+            output += (f"Last Day Share Price = ${last_day_close_price}<br>")
+            output += (f"Last Account Value = {account_value}<br>")
+            output += (f"Buy and Hold ROI = {buy_and_hold_ROI}%<br><br>")
+        
+        return output,buy_and_hold_ROI, account_value
+
+
     def plot_account(self,stock=None):
         buyhold_account = pd.DataFrame(index=self.df_in.index,columns=["BuyHoldValue"])
         buyhold_account = self.DatesRange(buyhold_account)
@@ -191,6 +231,10 @@ class SignalsBacktester:
             
         plt.show()
         
+
+
+        
+    @suppress_warnings
     def run(self):
         """Generate the backtesting calculations and return a pandas DataFrame with the results 
         """
@@ -215,6 +259,39 @@ class SignalsBacktester:
         #          'Sell_Count','Sell_Amount','Shares_Count','Running_Balance','Account_Value','ROI_pcnt']].tail(30))
 
         print(f"\nBUY & HOLD Strategy:\n\tReturn on Investment : {buy_and_hold_ROI}%\n\tEnding Account Value : ${ending_account_value}")
+
+    @suppress_warnings
+    def run_html(self,stock='N/A'):
+        """Generate the backtesting calculations and return a pandas DataFrame with the results 
+        """
+        # invest_mount = 100000
+        # start_date = '2022-09-01'
+
+        output = f'<h2 style="text-decoration: underline;">Backtesting this Strategy on {stock}</h2><b>'
+        output += (f"Start Investment Date : {self.start_date}<br>")
+        output += (f"Investment Amount : ${self.amount}")
+        output += "<ul>"
+
+        # df_tran = backtest(df_in,df_pred1.Predicted,start_date='2022-01-01',end_date='2023-01-01')
+        df_tran = self.backtest()
+        returns = df_tran.ROI_pcnt[-1]
+        html_output,buy_and_hold_ROI,ending_account_value = self.buy_and_hold_strategy_html()
+        output += html_output
+        
+        if returns > buy_and_hold_ROI:
+            on_color = 'green'
+        else:
+            on_color = 'red'
+            
+        output += (f"<div style='background:{on_color};color:white'><h3 style='background:{on_color};color:white'>AI PREDICTION ENGINE Strategy:</h3>Return on Investment : {returns}%<br>Ending Account Value : ${df_tran['Account_Value'].iloc[-1]}<br></div>")
+
+        # print(df_tran[['Open','Close','Predicted','Buy_Count','Buy_Amount',
+        #          'Sell_Count','Sell_Amount','Shares_Count','Running_Balance','Account_Value','ROI_pcnt']].tail(30))
+
+        output += (f"<div><h3>BUY & HOLD Strategy:</h3>Return on Investment : {buy_and_hold_ROI}%<br>Ending Account Value : ${ending_account_value}</b></div>")
+        output += "</ul><hr>"
+        return output
+
 
     def results(self):
         tran_history = self.get_tran_history()

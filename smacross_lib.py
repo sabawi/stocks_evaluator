@@ -12,6 +12,17 @@ import matplotlib.pyplot as plt
 plt.style.use('fivethirtyeight')
 plt.rcParams['figure.figsize'] = (20,10)
 
+import warnings
+from functools import wraps
+
+def suppress_warnings(func):
+  """Decorator to suppress warnings within a function."""
+  @wraps(func)
+  def wrapper(*args, **kwargs):
+    with warnings.catch_warnings():
+      warnings.filterwarnings("ignore", category=FutureWarning)
+      return func(*args, **kwargs)
+  return wrapper
 
 # In[204]:
 
@@ -69,7 +80,7 @@ def implement_signal_strategy(prices, st):
 
 
 # In[206]:
-
+@suppress_warnings
 def sma_xing(data:pd.DataFrame,fast_sma:int, slow_sma:int):
     # stock = str(input("Enter Stock Symbol : ")).upper()
     # fast_sma = int(input("Enter the Fast Simple Moving Average Period : "))

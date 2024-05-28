@@ -4,36 +4,49 @@ import pandas as pd
 from tabulate import tabulate
 from Backtester import SignalsBacktester as bt
 import yfinance as yf
+import warnings
+from functools import wraps
+
 
 transact_record = []
 
-def add_data(data, date, symbols):
-  """
-  Adds a new entry to the provided data dictionary with the date and stock symbols set.
-  If the date already exists, it appends the new symbols to the existing set.
 
-  Args:
-      data: A dictionary to store date and stock symbol sets.
-      date: The date as a string in YYYY-MM-DD format.
-      symbols: A list of stock symbols.
-  """
-  if date not in data:
-    data[date] = {symbols}
-  else:
-    data[date].update({symbols})  # Update with new symbols using set(symbols)
+def suppress_warnings(func):
+    """Decorator to suppress warnings within a function."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=FutureWarning)
+            return func(*args, **kwargs)
+    return wrapper
+
+
+def add_data(data, date, symbols):
+    """
+    Adds a new entry to the provided data dictionary with the date and stock symbols set.
+    If the date already exists, it appends the new symbols to the existing set.
+
+    Args:
+        data: A dictionary to store date and stock symbol sets.
+        date: The date as a string in YYYY-MM-DD format.
+        symbols: A list of stock symbols.
+    """
+    if date not in data:
+        data[date] = {symbols}
+    else:
+        data[date].update({symbols})  # Update with new symbols using set(symbols)
 
 
 def make_buys_df(data):
     """
-  Converts the provided data dictionary to a Pandas DataFrame with columns 'Date' and 'Stock'.
+    Converts the provided data dictionary to a Pandas DataFrame with columns 'Date' and 'Stock'.
 
-  Args:
-      data: A dictionary containing date and stock symbol sets.
+    Args:
+        data: A dictionary containing date and stock symbol sets.
 
-  Returns:
-      A Pandas DataFrame.
-  """
-  
+    Returns:
+        A Pandas DataFrame.
+    """
     if not data:
         df = pd.DataFrame(columns=['Date', 'Stock'])  # Return empty DataFrame
         df = df.set_index('Date')
@@ -55,18 +68,18 @@ def make_buys_df(data):
 # print(df)
 
 class TradeRecord:
-  def __init__(self, transact, date, stock, note):
-    self.transact = transact
-    self.date = date
-    self.stock = stock
-    self.note = note
+    def __init__(self, transact, date, stock, note):
+        self.transact = transact
+        self.date = date
+        self.stock = stock
+        self.note = note
 
-    # Validation logic can be added here
-    if self.transact not in ('Buy', 'Sell', 'None'):
-        raise ValueError(f"Invalid transaction type: {self.transact}")
-    def __str__(self):
-        # Return a string representation of the record data
-        return f"Transact: {self.transact}, Date: {self.date}, Stock: {self.stock}, Note: {self.note}"
+        # Validation logic can be added here
+        if self.transact not in ('Buy', 'Sell', 'None'):
+            raise ValueError(f"Invalid transaction type: {self.transact}")
+        def __str__(self):
+            # Return a string representation of the record data
+            return f"Transact: {self.transact}, Date: {self.date}, Stock: {self.stock}, Note: {self.note}"
 
 def transact(action,date,stock,note):
     # Create a TradeRecord object
@@ -76,32 +89,32 @@ def transact(action,date,stock,note):
     transact_record.append(record)
     
 def connect_db(db_file):
-  """Connects to the database file and returns the connection object.
+    """Connects to the database file and returns the connection object.
 
-  Args:
-      db_file (str): Path to the database file.
+    Args:
+        db_file (str): Path to the database file.
 
-  Returns:
-      sqlite3.Connection: The connection object to the database.
-  """
-  conn = sqlite3.connect(db_file)
-  return conn
+    Returns:
+        sqlite3.Connection: The connection object to the database.
+    """
+    conn = sqlite3.connect(db_file)
+    return conn
 
 def query_data(conn, sql_statement):
-  """Executes the provided SQL statement and returns the cursor object.
+    """Executes the provided SQL statement and returns the cursor object.
 
-  Args:
-      conn (sqlite3.Connection): The connection object to the database.
-      sql_statement (str): The SQL statement to be executed.
+    Args:
+        conn (sqlite3.Connection): The connection object to the database.
+        sql_statement (str): The SQL statement to be executed.
 
-  Returns:
-      sqlite3.Cursor: The cursor object containing the results of the query.
-  """
-  cursor = conn.cursor()
-  cursor.execute(sql_statement)
-  return cursor
+    Returns:
+        sqlite3.Cursor: The cursor object containing the results of the query.
+    """
+    cursor = conn.cursor()
+    cursor.execute(sql_statement)
+    return cursor
 
-def process_data(cursor):
+def process_data(cursor,conn ,filter_name = None):
     """Processes the data from the cursor and prints buy/sell alerts.
 
     This function iterates through the cursor data (assumed to be stock information with 
@@ -116,17 +129,43 @@ def process_data(cursor):
     today_portfolio = {}
     sell_portfolio = {}
     
+    # init processing_date to sometime in the far past
     processing_date = datetime.strptime("2000-01-01", "%Y-%m-%d")
+    # init filtered_list_date to sometime in the far part
+    filtered_list_date = processing_date
+    
     for row in cursor.fetchall():
         last_run, stock, last_price = row
         date_last_run =  datetime.strptime(last_run, "%Y-%m-%d")
-        stock = stock.strip()
+        stock = stock.strip().upper()
+        # print(f"fetchall() Stock = {stock}, row={row}")
+        
+        # init the in_filtered_list flag for each new row
+        in_filtered_list = False
+        
         # Check if it's a new date
-        if date_last_run > processing_date: 
-
+        # if date_last_run > processing_date : 
+        if True:
+            
+            # print(f"************************* Stock = {stock}")
+            # Get the recommendation list on this date for the given filter
+            if date_last_run > filtered_list_date:
+                # print(f"1 - Calling filter_list() {filter_name}")
+                filtered_list = filter_list(last_run, filter_name, conn)
+                # print('filtered_list:')
+                # print(filtered_list)
+                filtered_list_date = date_last_run
+            
+            # print(f"Stock = {stock}, set = {set(filtered_list['Stock'])}")
+            if stock in set(filtered_list['Stock']):
+                in_filtered_list = True
+            
+            # print(f"in_filtered_list = {in_filtered_list}")
+            
             # If there are stocks to sell from the last pass, sell them now
             for sell_stock in sell_portfolio:
-                print(f"SELL: {sell_stock} on {processing_date}")
+                # if sell_stock == 'MU':
+                #     print(f"SELL: {sell_stock} on {processing_date}")
                     
                 # Create a TradeRecord object
                 transact("Sell", processing_date, sell_stock, "Sell at the next open")          
@@ -135,50 +174,135 @@ def process_data(cursor):
             today_portfolio = {}
             
             # At this point, current_portfolio comes from the previous date's list (processing_date)
-            print("************************************************************")
-            print(f"Portfolio for ({processing_date}) Should be : {current_portfolio}")   
-            print("************************************************************")
+            # print("************************************************************")
+            # print(f"Portfolio for ({processing_date}) Should be : {current_portfolio}")   
+            # print("************************************************************")
 
 
             # update the processing_date to the one in the last record
             processing_date = date_last_run
-            print(f"New Date: {processing_date}")
+            # print(f"New Date: {processing_date}")
             sell_portfolio = {}
             today_portfolio = {}            
             
             # Check if the stock in the record is in the current portfolio
             # If not transact a Buy and add it to today_portfolio
-            if stock not in current_portfolio:                 
-                print(f"BUY: {stock} on {last_run} at ${last_price}")         
+            if in_filtered_list and stock not in current_portfolio:    
+                # if stock == 'MU':             
+                #     print(f"BUY: {stock} on {last_run} at ${last_price}")         
                 
                 # Create a TradeRecord object
                 transact("Buy", processing_date, stock, "Buy at the next open")   
                 
-            today_portfolio[stock] = last_run
+                today_portfolio[stock] = last_run
         # Else the new record is still in the same date as the last pass
-        else:
-            # if the new record has a stock not in the current portfolio, buy it
-            if stock not in set(current_portfolio):
-                print(f"BUY: {stock} on {last_run} at ${last_price}")                          
-                # Create a TradeRecord object
+        # else:
+        #     # Get the recommendation list on this date for the given filter
+        #     if date_last_run > filtered_list_date:
+        #         # print("2 - Calling filter_list()")
+        #         filtered_list = filter_list(last_run, filter_name, conn)
+        #         filtered_list_date = date_last_run
                 
-                transact("Buy", processing_date, stock, "Buy at the next open")
+        #     # if the new record has a stock not in the current portfolio, buy it
+        #     if in_filtered_list and stock not in set(current_portfolio):
+        #         # print(f"BUY: {stock} on {last_run} at ${last_price}")                          
+        #         # Create a TradeRecord object
                 
-            today_portfolio[stock] = last_run
+        #         transact("Buy", processing_date, stock, "Buy at the next open")
+                
+        #     today_portfolio[stock] = last_run
             
+        # print(f"current_portfolio = {current_portfolio}\ntoday_portfolio={today_portfolio} ")
         sell_portfolio = set(current_portfolio) - set(today_portfolio)
 
     # If there are stocks to sell from the last pass, sell them now
-    for sell_stock in sell_portfolio:
-        print(f"SELL: {sell_stock} on {processing_date}")
+    # for sell_stock in sell_portfolio:
+        # print(f"SELL: {sell_stock} on {processing_date}")
             
         # Create a TradeRecord object
-        transact("Sell", processing_date, sell_stock, "Sell at the next open")          
+        # transact("Sell", processing_date, sell_stock, "Sell at the next open")          
             
+    # print("\n************************************************************")
+    # print(f"FINAL Portfolio : {today_portfolio}")   
+    # print("************************************************************")
+                    
+import pandas as pd
+from datetime import datetime
+
+def process_df_data(buy_eval_df):
+    """Processes the data from the DataFrame and prints buy/sell alerts.
+
+    This function iterates through the DataFrame data (assumed to be stock information with 
+    "Last Run", "Stock", and "Last Price" columns) and simulates a trading process based on 
+    specific conditions. It keeps track of a current portfolio and prints buy/sell alerts 
+    as dates change and stock presence/absence changes.
+
+    Args:
+        buy_eval_df (pd.DataFrame): The DataFrame containing the stock data.
+    """
+    current_portfolio = {}  # Use a dictionary to store stock symbols with last_run dates
+    today_portfolio = {}
+    sell_portfolio = {}
+    
+    processing_date = datetime.strptime("2000-01-01", "%Y-%m-%d")
+    
+    for _, row in buy_eval_df.iterrows():
+        last_run, stock, last_price = row["Last Run"], row["Stock"], row["Last Price"]
+        date_last_run = datetime.strptime(last_run, "%Y-%m-%d")
+        stock = stock.strip()
+        
+        # Check if it's a new date
+        if date_last_run > processing_date: 
+            # If there are stocks to sell from the last pass, sell them now
+            for sell_stock in sell_portfolio:
+                # print(f"SELL: {sell_stock} on {processing_date}")
+                # Create a TradeRecord object
+                transact("Sell", processing_date, sell_stock, "Sell at the next open")
+            
+            current_portfolio = today_portfolio.copy()
+            today_portfolio = {}
+            
+            # At this point, current_portfolio comes from the previous date's list (processing_date)
+            # print("************************************************************")
+            # print(f"Portfolio for ({processing_date}) Should be : {current_portfolio}")   
+            # print("************************************************************")
+            
+            # Update the processing_date to the one in the last record
+            processing_date = date_last_run
+            # print(f"New Date: {processing_date}")
+            sell_portfolio = {}
+            today_portfolio = {}
+            
+            # Check if the stock in the record is in the current portfolio
+            # If not, transact a Buy and add it to today_portfolio
+            if stock not in current_portfolio:                 
+                # print(f"BUY: {stock} on {last_run} at ${last_price}")
+                # Create a TradeRecord object
+                transact("Buy", processing_date, stock, "Buy at the next open")
+            
+            today_portfolio[stock] = last_run
+        else:
+            # Else the new record is still in the same date as the last pass
+            if stock not in set(current_portfolio):
+                # print(f"BUY: {stock} on {last_run} at ${last_price}")
+                # Create a TradeRecord object
+                transact("Buy", processing_date, stock, "Buy at the next open")
+            
+            today_portfolio[stock] = last_run
+        
+        sell_portfolio = set(current_portfolio) - set(today_portfolio)
+    
+    # If there are stocks to sell from the last pass, sell them now
+    for sell_stock in sell_portfolio:
+        # print(f"SELL: {sell_stock} on {processing_date}")
+        # Create a TradeRecord object
+        transact("Sell", processing_date, sell_stock, "Sell at the next open")
+    
     print("\n************************************************************")
     print(f"FINAL Portfolio : {today_portfolio}")   
     print("************************************************************")
-                    
+
+
 def query_distinct_dates(conn, table_name):
     """
     Queries a database table and returns distinct values in the specified date column, 
@@ -222,6 +346,8 @@ def get_eval_by_date(conn, datestr):
         pandas.DataFrame: A DataFrame containing the matching rows from the table, 
                             or an empty DataFrame if no data is found.
     """
+    # db_file = "data.db"  # Replace with your actual database filename
+    # conn2 = connect_db(db_file)
     cursor = conn.cursor()
 
     sql_statement = f"""
@@ -231,6 +357,7 @@ def get_eval_by_date(conn, datestr):
 
     cursor.execute(sql_statement, (datestr,))  # Use tuple for parameter substitution
     results = cursor.fetchall()
+    # print(f" get_eval_by_date() {results}")
 
     # Check if any results were found
     if results:
@@ -259,108 +386,226 @@ def screen_for_buys(eval_df, ignore_supertrend_winners=False):
         
         return buys_df
     
-def main():
-    """Main function to connect, query, and process data"""
+def filter_list(datestr, filter_name, conn):
+    
+    # print(f"in filter_list() datestr = {datestr}")
+    if not datestr:
+        datestr = date.today.today.strftime("%Y-%m-%d")
+        
+    result = get_eval_by_date(conn, datestr)
+    if result.empty:
+        print(f"*** NO RESULTS on {datestr}")
+        return result
+    # else:
+    #     print("********* Results found **********")
+        
+    # print(result)
+    match filter_name:
+        case "buybuybuy":
+            result = screen_for_buys(eval_df=result,ignore_supertrend_winners=False)
+            result = result.sort_values('Daily VaR',ascending=False).sort_values('%Sharpe Ratio',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
+        case "buybuybuy_not_st":
+            result = screen_for_buys(eval_df=result,ignore_supertrend_winners=True)
+            result = result.sort_values('Daily VaR',ascending=False).sort_values('%Sharpe Ratio',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
+        case "all_up_safe":
+            result = screen_for_buys(eval_df=result,ignore_supertrend_winners=False)
+            result = result.sort_values('Daily VaR',ascending=False).sort_values('%Sharpe Ratio',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
+            result = result[(result['Beta']>0.8) & (result['Beta']<2) ].sort_values(by='SMA_X_Date', ascending=False).sort_values('Daily VaR',ascending=False)
+        case "smx_st_win":
+            result = result[(result['SMA Crossed_Up'] == 'Buy') & (result['Supertrend Result'] == 'Buy') & (result['Supertrend Winner'] == True) ].sort_values('SMA_X_Date', ascending=False)
+        case _:
+            print(f"No such pre-programmed filter '{filter_name}'")
+            
+            
+    return result
+
+def get_user_inputs():
+    """
+    Prompts the user for market date and recommendation list name.
+
+    Returns:
+        tuple: A tuple containing the market date (string) and recommendation list name (string).
+    """
+
+    while True:
+        # Get market date (loop until valid format)
+        market_date = input("Enter market date (YYYY-MM-DD): ")
+        try:
+            # Check if date format is valid (YYYY-MM-DD)
+            datetime.strptime(market_date, "%Y-%m-%d")
+            break  # Exit loop if format is valid
+        except ValueError:
+            print("Invalid market date format. Please use YYYY-MM-DD.")
+
+    # Get recommendation list name (no spaces allowed)
+    while True:
+        recommendation_list_name = input("Enter recommendation list name (no spaces): ")
+        if not recommendation_list_name.isspace():  # Check for any spaces
+            break  # Exit loop if no spaces
+        else:
+            print("Recommendation list name cannot contain spaces.")
+
+    return market_date, recommendation_list_name
+
+def report_buy_sell_backtest(inDate, recommendation_filter, stock):
     db_file = "data.db"  # Replace with your actual database filename
-    BuyBuyBuy = """
-        select "Last Run", "Stock" , "Last Price" 
-        from stock_data 
-        where "LR Next_Day Recomm" = "Buy,Buy,Buy" 
-        and "Supertrend Winner"=1 
-        and "Supertrend Result"="Buy" 
-        and "SMA Crossed_Up" = "Buy" 
-        ORDER BY "Last Run";
-    """
-
-    SMA_X_Supertrend_Winner = """
-        select "Last Run", "Stock" , "Last Price" 
-        from stock_data 
-        where "Supertrend Winner"=1 
-        and "Supertrend Result"="Buy" 
-        and "SMA Crossed_Up" = "Buy" 
-        ORDER BY "Last Run";
-    """
-    All_Roads_Lead_UP_Safe = """
-        select "Last Run", "Stock" , "Last Price" 
-        from stock_data 
-        where "Supertrend Winner"=1 
-        and "Supertrend Result"="Buy" 
-        and "SMA Crossed_Up" = "Buy" 
-        ORDER BY "Last Run";
-    """
-
-    # Set sql_statement to one of the SQL queries defined above
-    sql_statement = BuyBuyBuy 
-    
-    
+    conn = connect_db(db_file)
+    output = ""
     data = {}
     
-    conn = connect_db(db_file)
-    distinct_dates = query_distinct_dates(conn,'stock_data')
+    # Define column names and data types
+    filter_columns = ['FilterName', 'Description', 'Comments']
+    fdata_types = {'FilterName': str, 'Description': str, 'Comments': str}
     
-    datestr = '2024-05-10'
-    df_evaluation = get_eval_by_date(conn, datestr)
     
-    # Buy Buy and More Buy
-    buys_eval_df= screen_for_buys(eval_df=df_evaluation,ignore_supertrend_winners=False)
-    buys_eval_df = buys_eval_df.sort_values('Daily VaR',ascending=False).sort_values('%Sharpe Ratio',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
+    # Create an empty DataFrame with specified structure
+    filters_df = pd.DataFrame(columns=filter_columns, dtype=str)    
     
-    print("\nBUYS, BUYS, and more BUYS")
-    print("=========================")
-    print(f"{len(buys_eval_df)} Stocks:",flush=True)
-    sublist = ','.join(buys_eval_df['Stock'].astype(str))
-    print(sublist,flush=True)
-    print(buys_eval_df)
+    # Define a list of dictionaries, where each dictionary represents a row
+    rows = [
+        {'FilterName': 'buybuybuy', 'Description': 'BUYS, BUYS, and more BUYS', 'Comments': 'All indicators are BUY and in supertrend'},
+        {'FilterName': 'buybuybuy_not_st', 'Description': 'BUYS, BUYS, and more BUYS (Not necessarily ST winners)', 'Comments': 'All indicators are BUY but NOT in supertrend'},
+        {'FilterName': 'all_up_safe', 'Description': 'All Roads Lead to UP & Safe', 'Comments': 'Restricts the BUY BUY BUY list to low risk stocks only'},
+        {'FilterName': 'smx_st_win', 'Description': 'SMA Crossed and in Supertrend & Winner', 'Comments': 'Fast SMA Crossed up the Slow SMA, Supertrending and a Trend Winner'}
+    ]
 
-    # Buy Buy and More Buy (Not necessarily ST winners)
-    buys_eval_df2= screen_for_buys(eval_df=df_evaluation,ignore_supertrend_winners=True)
-    buys_eval_df2 = buys_eval_df.sort_values('Daily VaR',ascending=False).sort_values('%Sharpe Ratio',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
+    # Efficiently populate the DataFrame using list comprehension and pd.DataFrame
+    filters_df = pd.DataFrame([row for row in rows], columns=filter_columns)
+
+    # print(f"{recommendation_filter} \n {filters_df['FilterName']}")
+    if recommendation_filter in set(filters_df['FilterName']):
+        matching_row = next((row for row in rows if row['FilterName'] == recommendation_filter), None)
+        # output +=(f"\n{matching_row['Description']}<br>")
+        # output +=("=========================<br>")
+        buys_eval_df = filter_list(datestr=inDate,filter_name=recommendation_filter,conn=conn)
+        # output +=(f"{len(buys_eval_df)} Stocks:<br>")
+        if not buys_eval_df.empty:
+            sublist = ','.join(buys_eval_df['Stock'].astype(str))
+            # output +=(sublist)+"<br>"
+            # output +=buys_eval_df.to_html()
+        
+    else:
+        output += ("Filter NOT found<br>")
     
-    print("\nBUYS, BUYS, and more BUYS (Not necessarily ST winners)")
-    print("=========================")
-    print(f"{len(buys_eval_df2)} Stocks:",flush=True)
-    sublist_ = ','.join(buys_eval_df2['Stock'].astype(str))
-    print(sublist_,flush=True)
-    print(buys_eval_df2)
-
-
-    # All Roads Lead to UP & Safe
-    buys_safe = buys_eval_df[(buys_eval_df['Beta']>0.8) & (buys_eval_df['Beta']<2) ].sort_values(by='SMA_X_Date', ascending=False).sort_values('Daily VaR',ascending=False)
-
-    print("\nAll Roads Lead to UP & Safe")
-    print("======================++===")    
-    print(f"{len(buys_safe)} Stocks:",flush=True)
-    print(','.join(buys_safe['Stock'].astype(str)),flush=True)
-
-    # print(sublist,flush=True)
-    print(buys_safe)
-
-    # SMA Crossed and in Supertrend & Winner
-    Crossed_up = df_evaluation[(df_evaluation['SMA Crossed_Up'] == 'Buy') & (df_evaluation['Supertrend Result'] == 'Buy') & (df_evaluation['Supertrend Winner'] == True) ].sort_values('SMA_X_Date', ascending=False)
-    sublist2 = ','.join(Crossed_up['Stock'].astype(str))
-    
-    print("\nSMA Crossed and in Supertrend & Winner")
-    print("=====================+++++++++++++====")
-    print(sublist2,flush=True)
-    print(Crossed_up)
-    
-    # print(df_evaluation)
-    print(distinct_dates)
-    return
-    
+    sql_statement = """
+        select "Last Run", "Stock" , "Last Price" 
+        from stock_data 
+        ORDER BY "Last Run";
+        """
     cursor = query_data(conn, sql_statement)
-    process_data(cursor)
+    process_data(cursor,conn=conn,filter_name=recommendation_filter)
     conn.close()
     
     # Print the data structure (accessing record fields using dot notation)
-    old_date = None
     for record in transact_record:
-        # print(f"Transaction: {record.transact}, Date: {record.date}, Stock: {record.stock}, Note: {record.note}")
-        if record.date != old_date:
-            print(f"On {record.date} :")
-        print(f"\t{record.transact} {record.stock} ")
         add_data(data,record.date,f"{record.stock}")
-        old_date = record.date
+
+    records = []
+    for record in transact_record:
+        record_dict = {
+            'Transact': record.transact,
+            'Date': record.date,  # Assuming date is already a datetime object
+            'Stock': record.stock,
+            'Note': record.note
+        }
+        records.append(record_dict)
+
+    # Convert dictionary to list of records (tuples)
+    items = [(date, list(symbols)) for date, symbols in data.items()]
+    buy_stocks_df = pd.DataFrame(items,columns=['Date','Stock'])
+    buy_stocks_df = buy_stocks_df.set_index('Date')
+
+    # Create a Series with 0s (assuming all dates initially don't have the stock)
+    buy_alerts = pd.Series(0, index=buy_stocks_df.index)
+
+    # start_date = buy_alerts.index[0]
+    start_date = inDate 
+    # print(f"Alert start Date {start_date}")
+    df_prices = yf.download(stock,start=start_date,interval='1d',progress=False)
+    
+    for i, row in buy_stocks_df.iterrows():
+        # print(i,row["Stock"])
+        if stock in row['Stock']:
+            buy_alerts.loc[i] = 1
+            
+    # buy_alerts_original = buy_alerts.copy()
+    
+    buy_alerts = buy_alerts.shift(1).fillna(0)
+    # print("Buy Alerts ",buy_alerts)
+    df_pred = pd.DataFrame(buy_alerts,columns=['Predicted'],index=df_prices.index)
+
+    # Run backtesting on the model to verify the results
+    backtest = bt(df_in=df_prices, signals=df_pred, start_date=start_date, end_date=None, amount=10000)
+    output += backtest.run_html(stock)
+    tran_history = backtest.get_tran_history()
+    # print(tran_history)
+    # backtest.results()
+    # backtest.plot_account(f"{stock} Backtest since {start_date}")
+    
+    output += f'<h2 style="text-decoration: underline;">Backtesting Transaction History for {stock}</h2><b>'
+    output += tran_history.to_html(classes='table table-bordered', border=0, index=True, table_id='tran-history-table')
+    output += f'<br><br>'
+    return output
+    
+
+def main():
+    """Main function to connect, query, and process data"""
+    db_file = "data.db"  # Replace with your actual database filename
+    conn = connect_db(db_file)
+
+    data = {}
+
+    # Define column names and data types
+    filter_columns = ['FilterName', 'Description', 'Comments']
+    fdata_types = {'FilterName': str, 'Description': str, 'Comments': str}
+    
+    
+    # Create an empty DataFrame with specified structure
+    filters_df = pd.DataFrame(columns=filter_columns, dtype=str)    
+    
+    # Define a list of dictionaries, where each dictionary represents a row
+    rows = [
+        {'FilterName': 'buybuybuy', 'Description': 'BUYS, BUYS, and more BUYS', 'Comments': 'All indicators are BUY and in supertrend'},
+        {'FilterName': 'buybuybuy_not_st', 'Description': 'BUYS, BUYS, and more BUYS (Not necessarily ST winners)', 'Comments': 'All indicators are BUY but NOT in supertrend'},
+        {'FilterName': 'all_up_safe', 'Description': 'All Roads Lead to UP & Safe', 'Comments': 'Restricts the BUY BUY BUY list to low risk stocks only'},
+        {'FilterName': 'smx_st_win', 'Description': 'SMA Crossed and in Supertrend & Winner', 'Comments': 'Fast SMA Crossed up the Slow SMA, Supertrending and a Trend Winner'}
+    ]
+
+    # Efficiently populate the DataFrame using list comprehension and pd.DataFrame
+    filters_df = pd.DataFrame([row for row in rows], columns=filter_columns)
+
+    # Print the formatted string to the command line
+    print(filters_df)
+    
+    test_datestr, filter_name = get_user_inputs()
+
+    print(f"{filter_name} \n {filters_df['FilterName']}")
+    if filter_name in set(filters_df['FilterName']):
+        matching_row = next((row for row in rows if row['FilterName'] == filter_name), None)
+        print(f"\n{matching_row['Description']}")
+        print("=========================")
+        buys_eval_df = filter_list(datestr=test_datestr,filter_name=filter_name,conn=conn)
+        print(f"{len(buys_eval_df)} Stocks:",flush=True)
+        if not buys_eval_df.empty:
+            sublist = ','.join(buys_eval_df['Stock'].astype(str))
+            print(sublist,flush=True)
+            print(buys_eval_df)
+        
+    else:
+        print("Filter NOT found")
+    
+    sql_statement = """
+        select "Last Run", "Stock" , "Last Price" 
+        from stock_data 
+        ORDER BY "Last Run";
+        """
+    cursor = query_data(conn, sql_statement)
+    process_data(cursor,conn=conn,filter_name=filter_name)
+    conn.close()
+    
+    # Print the data structure (accessing record fields using dot notation)
+    for record in transact_record:
+        add_data(data,record.date,f"{record.stock}")
 
     records = []
     for record in transact_record:
@@ -373,8 +618,9 @@ def main():
         records.append(record_dict)
 
     # Assuming 'data' is the list of dictionaries from previous examples
-    transact_df = pd.DataFrame(records)
-    print(tabulate(transact_df, headers=transact_df.columns, tablefmt="grid"))
+    # transact_df = pd.DataFrame(records)
+    # print(transact_df)
+    # print(tabulate(transact_df[transact_df['Date']>=test_datestr], headers=transact_df.columns, tablefmt="grid"))
     
     # Convert dictionary to list of records (tuples)
     items = [(date, list(symbols)) for date, symbols in data.items()]
@@ -382,50 +628,41 @@ def main():
     buy_stocks_df = buy_stocks_df.set_index('Date')
     # print(buy_stocks_df)
     # Print the DataFrame
-    print(tabulate(buy_stocks_df, headers=buy_stocks_df.columns, tablefmt="grid"))
+    # print(tabulate(buy_stocks_df[buy_stocks_df.index>=test_datestr], headers=buy_stocks_df.columns, tablefmt="grid"))
 
 
     in_stock = input("Enter stock symbol : ").strip().upper()
-    instock_list = [in_stock]
+    # instock_list = [in_stock]
     # print("Target = ", instock_list)
+
+    # print(tabulate(transact_df[(transact_df['Date']>=test_datestr) & (transact_df['Stock'] == in_stock)], headers=transact_df.columns, tablefmt="grid"))
 
     # Create a Series with 0s (assuming all dates initially don't have the stock)
     buy_alerts = pd.Series(0, index=buy_stocks_df.index)
 
-    start_date = buy_alerts.index[0]
+    # start_date = buy_alerts.index[0]
+    start_date = test_datestr 
     # print(f"Alert start Date {start_date}")
     df_prices = yf.download(in_stock,start=start_date,interval='1d',progress=False)
     
-    # print(df_prices)
     for i, row in buy_stocks_df.iterrows():
         # print(i,row["Stock"])
         if in_stock in row['Stock']:
             buy_alerts.loc[i] = 1
-            # next_date_index = buy_alerts.index.get_loc(i) + 1  # Assuming index is a date object
             
-            
-            # if next_date_index < len(buy_alerts):  # Check if next index exists
-            #     buy_alerts.loc[buy_alerts.index[next_date_index]] = 1
-                # print(f"buy {in_stock} the next day {buy_alerts.index[next_date_index]} open")
-                
-        # if buy_alerts[i]:
-            # print(f"{i} BUY {in_stock} at ${round(df_prices['Open'].loc[i],2)}")
-            # print(f"{i} BUY {in_stock} ")
-        
-    buy_alerts_original = buy_alerts.copy()
+    # buy_alerts_original = buy_alerts.copy()
+    
     buy_alerts = buy_alerts.shift(1).fillna(0)
     # print("Buy Alerts ",buy_alerts)
-    df_pred = pd.DataFrame(buy_alerts,columns=['Predicted'],index=buy_alerts_original.index)
+    df_pred = pd.DataFrame(buy_alerts,columns=['Predicted'],index=df_prices.index)
 
     # Run backtesting on the model to verify the results
-    backtest = bt(df_in=df_prices, signals=df_pred, start_date=start_date, end_date=None, amount=100000)
+    backtest = bt(df_in=df_prices, signals=df_pred, start_date=start_date, end_date=None, amount=10000)
     backtest.run()
     tran_history = backtest.get_tran_history()
     # print(tran_history)
     backtest.results()
     backtest.plot_account(f"{in_stock} Backtest since {start_date}")
-
-
 
     # buy_alerts = buy_alerts.shift(1).fillna(0)
     # print(buy_alerts)
@@ -436,7 +673,7 @@ def main():
     # backtest = bt(df_in=df_in, signals=df_pred, start_date=start_date, end_date=None, amount=100000)
     # backtest.run()
     # tran_history = backtest.get_tran_history()
-    
-    
+      
 if __name__ == "__main__":
-  main()
+    # main()
+    report_buy_sell_backtest("2024-04-03","all_up_safe","SPY")
