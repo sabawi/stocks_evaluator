@@ -4,13 +4,18 @@
 """
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Use the 'Agg' backend for non-GUI environments
 import matplotlib.pyplot as plt
+
 from datetime import datetime
 import pytz
 import holidays
 from termcolor import colored as cl
 import warnings
 from functools import wraps
+import io
+from flask import Flask, request, send_file, jsonify
 
 
 def suppress_warnings(func):
@@ -231,7 +236,137 @@ class SignalsBacktester:
             
         plt.show()
         
+    def plot_account_image(self, stock=None):
+        print("in plot_account_image() Hi World",flush=True)
+        buyhold_account = pd.DataFrame(index=self.df_in.index, columns=["BuyHoldValue"])
+        buyhold_account = self.DatesRange(buyhold_account)
+        
+        close_changes = self.df_in.Close.pct_change().copy()
+        close_changes = self.DatesRange(close_changes)
+        
+        buyhold_account.iloc[0].BuyHoldValue = self.amount
+        
+        for i in range(1, len(buyhold_account)):
+            buyhold_account.iloc[i].BuyHoldValue = buyhold_account.iloc[i-1].BuyHoldValue + \
+            (close_changes.iloc[i] * buyhold_account.iloc[i-1].BuyHoldValue)
+        # print("**************** self.tran_history")
+        # print(self.tran_history)
+        # ax = self.tran_history[['Account_Value']][1:].plot(figsize=(15, 8), grid=True)
+        # buyhold_account.plot(ax=ax)
+        # ax = buyhold_account.plot()
+        trans_hist = self.get_tran_history()
+        print(trans_hist)
+        plt.figure(figsize=(15, 8))
+        plt.grid(True, which='both', linestyle='--', linewidth=0.5, color='gray')
+        if stock:
+            plt.title(f"{stock} AI vs Buy&Hold", fontsize=14, fontweight='bold')
+        else:
+            plt.title(f"AI vs Buy&Hold", fontsize=14, fontweight='bold')
+        
+        # Add labels for x and y axes
+        plt.xlabel('Date')  # Label for x-axis
+        plt.ylabel('Account Value')  # Label for y-axis
+        
+        plt.plot(buyhold_account['BuyHoldValue'], label="Buy and Hold", color='blue', linestyle='-', linewidth=1.5)
+        # t_hist = self.tran_history[1:] 
+        plt.plot(trans_hist['Account_Value'],label='Account Value', color='red', linestyle='--', linewidth=1.5)
+        
+        # Plot the buy signals
+        buy_signals = trans_hist[trans_hist['Buy_Count'] > 0]
+        for idx, row in buy_signals.iterrows():
+            if idx in self.df_in.index:
+                plt.scatter(idx, trans_hist.loc[idx, 'Account_Value'], marker='^', color='green', s=100)
+                plt.text(idx, trans_hist.loc[idx, 'Account_Value'], f'{self.df_in.loc[idx, "Open"]:.2f}', color='green', fontsize=10, ha='left', va='bottom')
 
+        # Plot the sell signals
+        sell_signals = trans_hist[trans_hist['Sell_Count'] > 0]
+        for idx, row in sell_signals.iterrows():
+            if idx in self.df_in.index:
+                plt.scatter(idx, trans_hist.loc[idx, 'Account_Value'], marker='v', color='red', s=100)
+                plt.text(idx, trans_hist.loc[idx, 'Account_Value'], f'{self.df_in.loc[idx, "Open"]:.2f}', color='red', fontsize=10, ha='left', va='top')
+                
+                
+        # Customize legend
+        # plt.legend(title='Investment Accounts:', loc='upper left', bbox_to_anchor=(1, 1))  # Adjust legend position
+        plt.legend(title='Investment Accounts:', loc='upper left')  # Adjust legend position
+    
+        # Customize axes (optional)
+        plt.xticks(rotation=45)  # Rotate x-axis tick labels for better readability (optional)
+        plt.tight_layout()  # Adjust spacing to prevent overlapping elements (optional)
+
+        # Major and minor ticks (optional)
+        plt.locator_params(axis='x', nbins=7)  # Adjust the number of major x-axis ticks
+        plt.locator_params(axis='y', nbins=5)  # Adjust the number of major y-axis ticks
+        plt.minorticks_on()  # Enable minor ticks on both axes
+
+
+        # Save the plot to a BytesIO object
+        img = io.BytesIO()
+        plt.savefig(img, format='png')
+        img.seek(0)
+        plt.close()
+        print("End Hi World",flush=True)
+        
+        # print(img.getvalue())
+        return img
+
+    # def plot_account_image2(self, stock=None):
+    #     print("in plot_account_image() Hi World", flush=True)
+        
+    #     buyhold_account = pd.DataFrame(index=self.df_in.index, columns=["BuyHoldValue"])
+    #     buyhold_account = self.DatesRange(buyhold_account)
+        
+    #     close_changes = self.df_in.Close.pct_change().copy()
+    #     close_changes = self.DatesRange(close_changes)
+        
+    #     buyhold_account.iloc[0].BuyHoldValue = self.amount
+        
+    #     for i in range(1, len(buyhold_account)):
+    #         buyhold_account.iloc[i].BuyHoldValue = buyhold_account.iloc[i-1].BuyHoldValue + \
+    #         (close_changes.iloc[i] * buyhold_account.iloc[i-1].BuyHoldValue)
+        
+    #     print("**************** self.tran_history")
+    #     print(self.tran_history)
+        
+    #     # Ensure the DataFrame slice is not empty
+    #     try:
+    #         account_value_slice = self.tran_history[['Account_Value']][1:]
+    #         if account_value_slice.empty:
+    #             print("Warning: account_value_slice is empty", flush=True)
+    #             return "Error: account_value_slice is empty", 400
+    #     except KeyError as e:
+    #         print(f"KeyError: {e}", flush=True)
+    #         return f"KeyError: {e}", 400
+    #     except Exception as e:
+    #         print(f"Unexpected error: {e}", flush=True)
+    #         return f"Unexpected error: {e}", 400
+        
+    #     # Perform the plot
+    #     ax = account_value_slice.plot(figsize=(15, 8), grid=True)
+        
+    #     # Check the AxesSubplot object
+    #     if ax is None:
+    #         print("Error: ax is None", flush=True)
+    #         return "Error: ax is None", 400
+        
+    #     # Plot the buyhold_account on the same axes
+    #     buyhold_account.plot(ax=ax)
+        
+    #     plt.grid(axis='both')
+    #     plt.legend(title='Investment Accounts:')
+    #     if stock:
+    #         plt.title(f"{stock} AI vs Buy&Hold", fontsize=14, fontweight='bold')
+    #     else:
+    #         plt.title(f"AI vs Buy&Hold", fontsize=14, fontweight='bold')
+        
+    #     # Save the plot to a BytesIO object
+    #     img = io.BytesIO()
+    #     plt.savefig(img, format='png')
+    #     img.seek(0)
+    #     plt.close()
+        
+    #     print("End Hi World", flush=True)
+    #     return send_file(img, mimetype='image/png')
 
         
     @suppress_warnings
@@ -333,6 +468,46 @@ class SignalsBacktester:
         print(cl("**                   TRANSACTION TABLE                    **",attrs=['bold'],on_color='on_blue')) 
         print(cl("************************************************************",attrs=['bold']))
         print(tran_history)
+
+
+    def results_html(self,stock):
+        tran_history = self.get_tran_history()
+        # print(f"Number of Buys : {tran_history['Buy_Count'].sum()}")
+        # print(f"tran_history: \n Buy Count:{tran_history.Buy_Count>0}\n{tran_history}")
+        max_account_value = tran_history[(tran_history['Account_Value'] == tran_history['Account_Value'].max())]
+        if tran_history['Buy_Count'].sum() > 0:
+            first_buy = tran_history[(tran_history['Buy_Count']>0)].index[0].strftime("%Y-%m-%d")
+        else:
+            first_buy = 'None'
+        buys = len(tran_history[tran_history['Buy_Count']>0])
+        sells = len(tran_history[tran_history['Sell_Count']>0])
+        days_bought_or_sold = tran_history[(tran_history['Buy_Count'] > 0) | (tran_history['Sell_Count'] > 0)]
+
+        # If no transactions, exit now else show transaction table
+        if buys == 0 :
+            return
+        
+        output = f'<h2 style="text-decoration: underline;">Results of Backtesting for {stock}</h2><b>'
+        output += "<ul>"
+        output += f"First Buy On: {first_buy}<br>"
+        output += f"Number of Buy Transactions : {buys}<br>"
+        output += f"Number of Sell Transactions : {sells}<br>"
+        output += f"Number of Days Transactions Happened : {len(days_bought_or_sold)} out of {len(tran_history)} Trading Days<br><br>"
+
+        trans_from_first_buy = tran_history.loc[first_buy:]
+        lowest_account_value = trans_from_first_buy[(trans_from_first_buy['Account_Value'] == trans_from_first_buy['Account_Value'].min())]
+        max_drawdown = tran_history[(tran_history['ROI_pcnt'] == tran_history['ROI_pcnt'].min())]
+        highest_ROI = tran_history[(tran_history['ROI_pcnt'] == tran_history['ROI_pcnt'].max())]
+
+        output += f"Peak Account Value was on {max_account_value.index[0].strftime('%Y-%m-%d')} : ${max_account_value.iloc[0].Account_Value}<br>"
+        output += f"Lowest Account Value was on {lowest_account_value.index[0].strftime('%Y-%m-%d')} : ${lowest_account_value.iloc[0].Account_Value}<br>"
+
+        output += f"Highest ROI (Max % Return) was on {highest_ROI.index[0].strftime('%Y-%m-%d')} : {highest_ROI.iloc[0].ROI_pcnt}%<br>"
+        output += f"Lowest ROI (Max % Drawdown) was on {max_drawdown.index[0].strftime('%Y-%m-%d')} : {max_drawdown.iloc[0].ROI_pcnt}%<br>"
+        output += "</ul><hr>"
+
+
+        return output
 
 if __name__ == "__main__":
     # pass

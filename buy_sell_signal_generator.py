@@ -447,10 +447,10 @@ def get_user_inputs():
 
     return market_date, recommendation_list_name
 
-def report_buy_sell_backtest(inDate, recommendation_filter, stock):
+def report_buy_sell_backtest(inDate, recommendation_filter, stock, is_plot):
     db_file = "data.db"  # Replace with your actual database filename
     conn = connect_db(db_file)
-    output = ""
+    output = "<div id='backtesting_results'>"
     data = {}
     
     # Define column names and data types
@@ -484,6 +484,8 @@ def report_buy_sell_backtest(inDate, recommendation_filter, stock):
             # output +=(sublist)+"<br>"
             # output +=buys_eval_df.to_html()
         
+        output += f"<h4>Applied Strategy : {matching_row['Description']}</hr>"
+        # +filters_df[filters_df['FilterName'] == recommendation_filter]['Description']
     else:
         output += ("Filter NOT found<br>")
     
@@ -539,15 +541,119 @@ def report_buy_sell_backtest(inDate, recommendation_filter, stock):
     output += backtest.run_html(stock)
     tran_history = backtest.get_tran_history()
     # print(tran_history)
-    # backtest.results()
-    # backtest.plot_account(f"{stock} Backtest since {start_date}")
+    output += backtest.results_html(stock)
+    
+    # plot_image = backtest.plot_account_image(f"{stock} Backtest since {start_date}")
+    # img_data = plot_image.getvalue()
     
     output += f'<h2 style="text-decoration: underline;">Backtesting Transaction History for {stock}</h2><b>'
     output += tran_history.to_html(classes='table table-bordered', border=0, index=True, table_id='tran-history-table')
     output += f'<br><br>'
-    return output
+    output += "</div>"
+    if is_plot == 0:
+        return output
+    elif is_plot == 1:
+        plot_image = backtest.plot_account_image(f"{stock} Backtest since {start_date}")
+        return plot_image
     
+def plot_account_image_route(inDate, recommendation_filter, stock):
+    # print(f"In plot_account_image {inDate}, {recommendation_filter}, {stock}")
+    db_file = "data.db"  # Replace with your actual database filename
+    conn = connect_db(db_file)
+    data = {}
+    
+    # Define column names and data types
+    filter_columns = ['FilterName', 'Description', 'Comments']
+    fdata_types = {'FilterName': str, 'Description': str, 'Comments': str}
+    
+    
+    # Create an empty DataFrame with specified structure
+    filters_df = pd.DataFrame(columns=filter_columns, dtype=str)    
+    
+    # Define a list of dictionaries, where each dictionary represents a row
+    rows = [
+        {'FilterName': 'buybuybuy', 'Description': 'BUYS, BUYS, and more BUYS', 'Comments': 'All indicators are BUY and in supertrend'},
+        {'FilterName': 'buybuybuy_not_st', 'Description': 'BUYS, BUYS, and more BUYS (Not necessarily ST winners)', 'Comments': 'All indicators are BUY but NOT in supertrend'},
+        {'FilterName': 'all_up_safe', 'Description': 'All Roads Lead to UP & Safe', 'Comments': 'Restricts the BUY BUY BUY list to low risk stocks only'},
+        {'FilterName': 'smx_st_win', 'Description': 'SMA Crossed and in Supertrend & Winner', 'Comments': 'Fast SMA Crossed up the Slow SMA, Supertrending and a Trend Winner'}
+    ]
 
+    # Efficiently populate the DataFrame using list comprehension and pd.DataFrame
+    filters_df = pd.DataFrame([row for row in rows], columns=filter_columns)
+
+    # print(f"{recommendation_filter} \n {filters_df['FilterName']}")
+    if recommendation_filter in set(filters_df['FilterName']):
+        matching_row = next((row for row in rows if row['FilterName'] == recommendation_filter), None)
+        # output +=(f"\n{matching_row['Description']}<br>")
+        # output +=("=========================<br>")
+        buys_eval_df = filter_list(datestr=inDate,filter_name=recommendation_filter,conn=conn)
+        # output +=(f"{len(buys_eval_df)} Stocks:<br>")
+        if not buys_eval_df.empty:
+            sublist = ','.join(buys_eval_df['Stock'].astype(str))
+            # output +=(sublist)+"<br>"
+            # output +=buys_eval_df.to_html()
+        
+    
+    sql_statement = """
+        select "Last Run", "Stock" , "Last Price" 
+        from stock_data 
+        ORDER BY "Last Run";
+        """
+    cursor = query_data(conn, sql_statement)
+    process_data(cursor,conn=conn,filter_name=recommendation_filter)
+    conn.close()
+    # print("transact_record:")
+    # Print the data structure (accessing record fields using dot notation)
+    for record in transact_record:
+        add_data(data,record.date,f"{record.stock}")
+
+    records = []
+    for record in transact_record:
+        record_dict = {
+            'Transact': record.transact,
+            'Date': record.date,  # Assuming date is already a datetime object
+            'Stock': record.stock,
+            'Note': record.note
+        }
+        # print(record_dict)
+        records.append(record_dict)
+
+    # Convert dictionary to list of records (tuples)
+    items = [(date, list(symbols)) for date, symbols in data.items()]
+    buy_stocks_df = pd.DataFrame(items,columns=['Date','Stock'])
+    buy_stocks_df = buy_stocks_df.set_index('Date')
+
+    # Create a Series with 0s (assuming all dates initially don't have the stock)
+    buy_alerts = pd.Series(0, index=buy_stocks_df.index)
+
+    # start_date = buy_alerts.index[0]
+    start_date = inDate 
+    # print(f"Alert start Date {start_date}")
+    df_prices = yf.download(stock,start=start_date,interval='1d',progress=False)
+    # print(df_prices)
+    
+    for i, row in buy_stocks_df.iterrows():
+        # print(i,row["Stock"])
+        if stock in row['Stock']:
+            buy_alerts.loc[i] = 1
+            
+    # buy_alerts_original = buy_alerts.copy()
+    
+    buy_alerts = buy_alerts.shift(1).fillna(0)
+    # print("Buy Alerts ",buy_alerts)
+    df_pred = pd.DataFrame(buy_alerts,columns=['Predicted'],index=df_prices.index)
+
+    # Run backtesting on the model to verify the results
+    # print(f"INPUT DATA: {df_prices}, {df_pred}, {start_date}")
+    backtest = bt(df_in=df_prices, signals=df_pred, start_date=start_date, end_date=None, amount=10000)
+    tran_history = backtest.get_tran_history()
+    print(tran_history)
+    
+    plot_image = backtest.plot_account_image(f"{stock} Backtest since {start_date}")
+    # print("Out of plot_account_image ")
+    
+    return plot_image
+    
 def main():
     """Main function to connect, query, and process data"""
     db_file = "data.db"  # Replace with your actual database filename
@@ -675,5 +781,5 @@ def main():
     # tran_history = backtest.get_tran_history()
       
 if __name__ == "__main__":
-    # main()
-    report_buy_sell_backtest("2024-04-03","all_up_safe","SPY")
+    main()
+    # report_buy_sell_backtest("2024-04-03","all_up_safe","SPY")
