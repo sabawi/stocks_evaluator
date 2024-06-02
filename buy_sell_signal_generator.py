@@ -452,6 +452,7 @@ def report_buy_sell_backtest(inDate, recommendation_filter, stock, is_plot):
     conn = connect_db(db_file)
     output = "<div id='backtesting_results'>"
     data = {}
+    invest_amount =10000 # Initial investment in $$
     
     # Define column names and data types
     filter_columns = ['FilterName', 'Description', 'Comments']
@@ -489,9 +490,10 @@ def report_buy_sell_backtest(inDate, recommendation_filter, stock, is_plot):
     else:
         output += ("Filter NOT found<br>")
     
-    sql_statement = """
+    sql_statement = f"""
         select "Last Run", "Stock" , "Last Price" 
         from stock_data 
+        where "Last Run" >= {inDate}
         ORDER BY "Last Run";
         """
     cursor = query_data(conn, sql_statement)
@@ -518,12 +520,16 @@ def report_buy_sell_backtest(inDate, recommendation_filter, stock, is_plot):
     buy_stocks_df = buy_stocks_df.set_index('Date')
 
     # Create a Series with 0s (assuming all dates initially don't have the stock)
-    buy_alerts = pd.Series(0, index=buy_stocks_df.index)
+    # buy_alerts = pd.Series(0, index=buy_stocks_df.index)
 
     # start_date = buy_alerts.index[0]
     start_date = inDate 
     # print(f"Alert start Date {start_date}")
     df_prices = yf.download(stock,start=start_date,interval='1d',progress=False)
+    
+    # Create a Series with 0s (assuming all dates initially don't have the stock)
+    buy_alerts = pd.Series(0, index=df_prices.index)
+    
     
     for i, row in buy_stocks_df.iterrows():
         # print(i,row["Stock"])
@@ -531,13 +537,17 @@ def report_buy_sell_backtest(inDate, recommendation_filter, stock, is_plot):
             buy_alerts.loc[i] = 1
             
     # buy_alerts_original = buy_alerts.copy()
-    
+    # print("Before Shift :",buy_alerts)
     buy_alerts = buy_alerts.shift(1).fillna(0)
+    # print("After Shift :",buy_alerts)
+    
     # print("Buy Alerts ",buy_alerts)
     df_pred = pd.DataFrame(buy_alerts,columns=['Predicted'],index=df_prices.index)
+    # print("Predicted  :",df_pred)
+
 
     # Run backtesting on the model to verify the results
-    backtest = bt(df_in=df_prices, signals=df_pred, start_date=start_date, end_date=None, amount=10000)
+    backtest = bt(df_in=df_prices, signals=df_pred, start_date=start_date, end_date=None, amount=invest_amount)
     output += backtest.run_html(stock)
     tran_history = backtest.get_tran_history()
     # print(tran_history)
@@ -553,7 +563,7 @@ def report_buy_sell_backtest(inDate, recommendation_filter, stock, is_plot):
     if is_plot == 0:
         return output
     elif is_plot == 1:
-        plot_image = backtest.plot_account_image(f"{stock} Backtest since {start_date}")
+        plot_image = backtest.plot_account_image(f"{stock} Backtest ${invest_amount} starting {start_date}")
         return plot_image
     
 def plot_account_image_route(inDate, recommendation_filter, stock):
@@ -639,7 +649,10 @@ def plot_account_image_route(inDate, recommendation_filter, stock):
             
     # buy_alerts_original = buy_alerts.copy()
     
+    print("Before Shift :",buy_alerts)
     buy_alerts = buy_alerts.shift(1).fillna(0)
+    print("After Shift :",buy_alerts)
+    
     # print("Buy Alerts ",buy_alerts)
     df_pred = pd.DataFrame(buy_alerts,columns=['Predicted'],index=df_prices.index)
 
@@ -757,8 +770,10 @@ def main():
             buy_alerts.loc[i] = 1
             
     # buy_alerts_original = buy_alerts.copy()
-    
+    # print("Before Shift :",buy_alerts,flush=True)
     buy_alerts = buy_alerts.shift(1).fillna(0)
+    # print("After Shift :",buy_alerts,flush=True)
+    
     # print("Buy Alerts ",buy_alerts)
     df_pred = pd.DataFrame(buy_alerts,columns=['Predicted'],index=df_prices.index)
 
