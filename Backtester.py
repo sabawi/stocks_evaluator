@@ -241,15 +241,6 @@ class SignalsBacktester:
         self.start_date = self.df_in.index[1].strftime("%Y-%m-%d")
         
         output = ''
-        # first_day_open = round(self.df_in.loc[self.start_date].Open,2)
-        # number_of_shares = int(self.amount/first_day_open)
-        # cost_of_shares = round(first_day_open * number_of_shares,2)
-        # cash_balance = round(self.amount - cost_of_shares,2)
-        # last_date_of_close = self.df_in.index[-1].strftime("%Y-%m-%d")
-        # value_of_shares_last_day = round(number_of_shares * self.df_in.iloc[-1].Close,2)
-        # account_value = round(cash_balance+value_of_shares_last_day,2)
-        # buy_and_hold_ROI = round( ( float(account_value/self.amount) - 1.0)*100 ,2)
-        # last_day_close_price = round(self.df_in.iloc[-1].Close,2)
         
         if self.print_details:
             output += ("<br>")
@@ -293,21 +284,9 @@ class SignalsBacktester:
             
         plt.show()
         
-    def plot_account_image(self, stock=None):
+    def plot_account_image(self, stock=None, show_image=False):
         print("in plot_account_image() Hi World",flush=True)
-        # buyhold_account = pd.DataFrame(index=self.df_in.index, columns=["BuyHoldValue"])
-        
-        # buyhold_account = self.DatesRange(buyhold_account)
-        
-        # open_changes = self.df_in.Open.pct_change().copy()
-        # open_changes = self.DatesRange(open_changes)
-                
-        # buyhold_account.iloc[0].BuyHoldValue = self.amount
-        # shares_to_buy = int(self.amount / self.df_in.iloc[1].Open)
-        # buy_hold_remainder = buyhold_account.iloc[0].BuyHoldValue - shares_to_buy * self.df_in.iloc[1].Open
-        # buyhold_account.iloc[1].BuyHoldValue = shares_to_buy * self.df_in.iloc[1].Open + buy_hold_remainder
-        
-        
+
         tmp_trans_hist = self.get_tran_history()
         print(tmp_trans_hist["Account_Value"])
         # trans_hist = tmp_trans_hist.iloc[1:]
@@ -317,15 +296,7 @@ class SignalsBacktester:
         print(f"\nDate={tmp_trans_hist.index[1]}, Share Price = {self.df_in.iloc[1].Open}, number of share = {shares_to_buy}\n")
         
         print(trans_hist.Buy_Hold)
-            
-        # print(buyhold_account)
-        # print("**************** self.tran_history")
-        # print(self.tran_history)
-        # ax = self.tran_history[['Account_Value']][1:].plot(figsize=(15, 8), grid=True)
-        # buyhold_account.plot(ax=ax)
-        # ax = buyhold_account.plot()
         
-        # print(trans_hist)
         plt.figure(figsize=(15, 8))
         plt.grid(True, which='both', linestyle='--', linewidth=0.5, color='gray')
         if stock:
@@ -394,16 +365,19 @@ class SignalsBacktester:
         plt.locator_params(axis='y', nbins=5)  # Adjust the number of major y-axis ticks
         plt.minorticks_on()  # Enable minor ticks on both axes
 
-
-        # Save the plot to a BytesIO object
-        img = io.BytesIO()
-        plt.savefig(img, format='png')
-        img.seek(0)
-        plt.close()
-        print("End Hi World",flush=True)
+        if not show_image:
+            # Save the plot to a BytesIO object
+            img = io.BytesIO()
+            plt.savefig(img, format='png')
+            img.seek(0)
+            plt.close()
+            print("End Hi World",flush=True)
         
-        # print(img.getvalue())
-        return img
+            # print(img.getvalue())
+            return img
+        else:
+            plt.show()
+
 
         
     @suppress_warnings
@@ -457,9 +431,6 @@ class SignalsBacktester:
             
         output += (f"<div style='background:{on_color};color:white'><h3 style='background:{on_color};color:white'>AI PREDICTION ENGINE Strategy:</h3>Return on Investment : {returns}%<br>Ending Account Value : ${df_tran['Account_Value'].iloc[-1]}<br></div>")
 
-        # print(df_tran[['Open','Close','Predicted','Buy_Count','Buy_Amount',
-        #          'Sell_Count','Sell_Amount','Shares_Count','Cash_Balance','Account_Value','ROI_pcnt']].tail(30))
-
         output += (f"<div><h3>BUY & HOLD Strategy:</h3>Return on Investment : {buy_and_hold_ROI}%<br>Ending Account Value : ${ending_account_value}</b></div>")
         output += "</ul><hr>"
         return output
@@ -467,8 +438,7 @@ class SignalsBacktester:
 
     def results(self):
         tran_history = self.get_tran_history()
-        # print(f"Number of Buys : {tran_history['Buy_Count'].sum()}")
-        # print(f"tran_history: \n Buy Count:{tran_history.Buy_Count>0}\n{tran_history}")
+
         max_account_value = tran_history[(tran_history['Account_Value'] == tran_history['Account_Value'].max())]
         if tran_history['Buy_Count'].sum() > 0:
             first_buy = tran_history[(tran_history['Buy_Count']>0)].index[0].strftime("%Y-%m-%d")
@@ -509,8 +479,7 @@ class SignalsBacktester:
 
     def results_html(self,stock):
         tran_history = self.get_tran_history()
-        # print(f"Number of Buys : {tran_history['Buy_Count'].sum()}")
-        # print(f"tran_history: \n Buy Count:{tran_history.Buy_Count>0}\n{tran_history}")
+
         max_account_value = tran_history[(tran_history['Account_Value'] == tran_history['Account_Value'].max())]
         if tran_history['Buy_Count'].sum() > 0:
             first_buy = tran_history[(tran_history['Buy_Count']>0)].index[0].strftime("%Y-%m-%d")
@@ -543,7 +512,6 @@ class SignalsBacktester:
         output += f"Lowest ROI (Max % Drawdown) was on {max_drawdown.index[0].strftime('%Y-%m-%d')} : {max_drawdown.iloc[0].ROI_pcnt}%<br>"
         output += "</ul><hr>"
 
-
         return output
 
 if __name__ == "__main__":
@@ -570,22 +538,30 @@ if __name__ == "__main__":
     df_pred = pd.DataFrame(buy_signals.items(), columns=['Date', 'Predicted'])
     df_pred.set_index('Date', inplace=True)
     
+    end_date = datetime.today().strftime('%Y-%m-%d')
+
+    # Generate the date range
+    date_range = pd.date_range(start=start_date, end=end_date)
+    # Set the value for the 'Predicted' column
+    df_pred['Predicted'] = 1
+    df_pred = df_pred.shift(1).fillna(0)
+    
     # Sample signals dataframe 
-    df_pred['Predicted']['2024-04-09']=0 # Sell
-    df_pred['Predicted']['2024-04-10']=1 # Buy
-    df_pred['Predicted']['2024-04-11']=1 # Buy
-    df_pred['Predicted']['2024-04-12']=1 # Buy
-    df_pred['Predicted']['2024-04-15']=0 # Sell
-    df_pred['Predicted']['2024-04-25']=1 # Buy
-    df_pred['Predicted']['2024-04-26']=1 # Buy
-    df_pred['Predicted']['2024-04-27']=1 # Buy
-    df_pred['Predicted']['2024-04-28']=1 # Buy
-    df_pred['Predicted']['2024-04-29']=1 # Buy
-    df_pred['Predicted']['2024-04-30']=1 # Buy
-    df_pred['Predicted']['2024-05-01']=1 # Buy
-    df_pred['Predicted']['2024-05-02']=1 # Buy
-    df_pred['Predicted']['2024-05-03']=1 # Buy
-    df_pred['Predicted']['2024-05-04']=0 # Sell
+    # df_pred.loc['2024-04-09','Predicted']=1 # Buy
+    df_pred.loc['2024-04-11','Predicted']=0 # Buy
+    df_pred.loc['2024-04-12','Predicted']=0 # Buy
+    df_pred.loc['2024-04-15','Predicted']=0 # Buy
+    df_pred.loc['2024-04-16','Predicted']=0 # Buy
+    df_pred.loc['2024-04-17','Predicted']=0 # Buy
+    df_pred.loc['2024-04-18','Predicted']=0 # Buy
+    # df_pred.loc['2024-04-25','Predicted']=0 # Buy
+    df_pred.loc['2024-04-26','Predicted']=0 # Buy
+    df_pred.loc['2024-04-29','Predicted']=0 # Buy
+    df_pred.loc['2024-04-30','Predicted']=0 # Buy
+    # df_pred.loc['2024-05-01','Predicted']=1 # Buy
+    # df_pred.loc['2024-05-02','Predicted']=1 # Buy
+    # df_pred.loc['2024-05-03','Predicted']=1 # Buy
+    # df_pred.loc['2024-05-04','Predicted']=1 # Buy
     
     # Shift the Buy signals data by 1 day forward if the buying will happen the next day's open price
     # df_pred = df_pred.shift(1).fillna(0)
@@ -594,9 +570,10 @@ if __name__ == "__main__":
     print(df_prices)
     
     # Run backtesting on the model to verify the results
-    backtest = SignalsBacktester(df_in=df_prices, signals=df_pred, start_date=start_date, end_date=None, amount=100000)
-    backtest.run()
+    backtest = SignalsBacktester(df_in=df_prices, signals=df_pred, start_date=start_date, end_date=None, amount=10000)
+    backtest.run_html()
     tran_history = backtest.get_tran_history()
     print(tran_history)
     backtest.results()
-    backtest.plot_account(f"{in_stock} Backtest since {start_date}")
+    matplotlib.use('GTK3Agg') 
+    backtest.plot_account_image(f"{in_stock} Backtest since {start_date}",show_image=True)
