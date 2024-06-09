@@ -13,6 +13,7 @@ import smacross_lib as smacross
 import CAPM_lib as capm
 import LR_run_model_lib as LR_run
 import LR_model_lib as LR_models
+import ta_verifer as ema_trend_ind
 import yfinance as yf
 pd.set_option('display.max_rows', 200)
 from IPython.display import display, HTML
@@ -92,26 +93,30 @@ def create_database():
     conn = sqlite3.connect('data.db')
     cursor = conn.cursor()
     # Define table schema with composite primary key
-    cursor.execute('''CREATE TABLE IF NOT EXISTS stock_data (
-                    "Last Run" TEXT,
-                    "Stock" TEXT,
-                    "Last Price" REAL,
-                    "%Std. Dev." TEXT,
-                    "$Std. Dev." TEXT,
-                    "Supertrend Winner" BOOLEAN,
-                    "Supertrend Result" TEXT,
-                    "ST Signal_Date" TEXT,
-                    "Days@ST" REAL,
-                    "LR Best_Model" TEXT,
-                    "LR Next_Day Recomm" TEXT,
-                    "SMA Crossed_Up" TEXT,
-                    "SMA_X_Date" TEXT,
-                    "SMA FastXSlow" TEXT,
-                    "Beta" REAL,
-                    "%Sharpe Ratio" REAL,
-                    "CAPM" REAL,
-                    "Daily VaR" REAL,
-                    PRIMARY KEY ("Last Run", "Stock")
+    cursor.execute('''CREATE TABLE "stock_data" (
+                    "Last Run"	TEXT,
+                    "Stock"	TEXT,
+                    "Last Price"	REAL,
+                    "%Std. Dev."	TEXT,
+                    "$Std. Dev."	TEXT,
+                    "Supertrend Winner"	BOOLEAN,
+                    "Supertrend Result"	TEXT,
+                    "ST Signal_Date"	TEXT,
+                    "Days@ST"	REAL,
+                    "LR Best_Model"	TEXT,
+                    "LR Next_Day Recomm"	TEXT,
+                    "SMA Crossed_Up"	TEXT,
+                    "SMA_X_Date"	TEXT,
+                    "SMA FastXSlow"	TEXT,
+                    "Beta"	REAL,
+                    "%Sharpe Ratio"	REAL,
+                    "CAPM"	REAL,
+                    "Daily VaR"	REAL,
+                    "EMA_Trend"	TEXT,
+                    "EMA_FasSlow"	TEXT,
+                    "EMA_Lookback"	INTEGER,
+                    PRIMARY KEY("Last Run","Stock")
+                );
                     )''')
     conn.commit()
     conn.close()
@@ -157,11 +162,12 @@ def insert_data_into_database(df):
             # print(f"Inserting row {index+1}: {row}")
 
             # If the combination does not exist, insert the row into the table
-            cursor.execute('''INSERT INTO stock_data VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            cursor.execute('''INSERT INTO stock_data VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                            (row['Last Run'], row['Stock'], row['Last Price'], str(row['%Std. Dev.']), str(row['$Std. Dev.']),
                             row['Supertrend Winner'], row['Supertrend Result'], row['ST Signal_Date'], row['Days@ST'],
                             row['LR Best_Model'], row['LR Next_Day Recomm'], row['SMA Crossed_Up'], row['SMA_X_Date'],
-                            str(row['SMA FastXSlow']), row['Beta'], row['%Sharpe Ratio'], row['CAPM'], row['Daily VaR']))
+                            str(row['SMA FastXSlow']), row['Beta'], row['%Sharpe Ratio'], row['CAPM'], row['Daily VaR'],
+                            str(row['EMA_Trend']), str(row['EMA_FasSlow'], row['EMA_Lookback'])))
 
     # Commit changes and close connection
     conn.commit()
@@ -341,12 +347,12 @@ def run_supertrend(stock,start_date):
 # %%
 def init_eval_table():
     columns = ['Last Run'          ,'Stock'             ,'Last Price'     ,'%Std. Dev.','$Std. Dev.','Supertrend Winner' ,'Supertrend Result','ST Signal_Date', 'Days@ST',
-               'LR Best_Model'     ,'LR Next_Day Recomm', 'SMA Crossed_Up','SMA_X_Date'        ,'SMA FastXSlow'    , 'Beta'         , 
-               '%Sharpe Ratio'                  ,'CAPM'              ,'Daily VaR'  ]
+               'LR Best_Model'     ,'LR Next_Day Recomm', 'SMA Crossed_Up','SMA_X_Date'        ,'SMA FastXSlow'    , 'EMA_Trend', 'EMA_FastXSlow', 'EMA_Lookback',
+               'Beta'         , '%Sharpe Ratio'                  ,'CAPM'              ,'Daily VaR'  ]
 
     dtypes = ['datetime64[ns]'       , str                , float            ,str      ,str        , bool              , str               , str            , float,
-              str                  , str                , str              , 'datetime64[ns]'    , str               , float          , 
-              float                , float                , float        ]
+              str                  , str                , str              , 'datetime64[ns]'    , str               , str                 , str            , float,
+              float          , float                , float                , float        ]
 
     # Initialize the DataFrame with empty rows
     eval_df = pd.DataFrame(columns=columns)
@@ -427,7 +433,9 @@ def limit_trailing_stop_order_percentage(stock,stock_data,multiple_of_std_dev):
     return close_price, pct_drop, price_drop, min_trailing_stop_price, limit_price, std_dev_pct, std_dev_dlr
 
 # %%
-def recommendation_table(eval_df,stock_list, lookback_years=1, sma_fast=40, sma_slow=200,run_update_models=False):
+def recommendation_table(eval_df,stock_list, lookback_years=1, sma_fast=40, sma_slow=200,
+                         ema_trend_fast=20,ema_trend_slow=40, ema_trend_lookback=7,
+                         run_update_models=False):
     stock_list = [str(s).upper() for s in stock_list]
     # print("Stock List:",stock_list)
     start_date = first_date_N_years_ago(lookback_years)
@@ -445,12 +453,15 @@ def recommendation_table(eval_df,stock_list, lookback_years=1, sma_fast=40, sma_
             print(f"{s} data not found. Skipping!",end=",",flush=True)
             continue
         
+        ema_last_date,ema_trend, df_trend_pdta = ema_trend_ind.calculate_pdta_alphatrend(stock=s,df=stock_data,Fast_EMA=ema_trend_fast,
+                                                                                      Slow_EMA=ema_trend_slow,Lookback=ema_trend_lookback)
         print(f"{s}",end=',',flush=True)
         mean, std_dev = get_sigma(stock_data)
         # std_dev = get_gstd(stock_data)
         std_dev_pct = round(std_dev * 100,2)
         std_dev_dlr = round(close_price*std_dev,2)
         sma_sig, sma_date, fastXslow = smacross.sma_xing(stock_data,sma_fast,sma_slow)
+        ema_fast_slow_str = f"({ema_trend_fast}X{ema_trend_slow})"
         beta, market_data = sbeta.get_beta(stock_data)
         CAPM, VaR, Sharpe = capm.CAPM_VaR(stock_data=stock_data,market_data=market_data,bond_mat_duration = lookback_years,stock_beta=beta)
         Sharpe = round(Sharpe,2)
@@ -458,7 +469,8 @@ def recommendation_table(eval_df,stock_list, lookback_years=1, sma_fast=40, sma_
         LR_recommend_str = f"{LR_recommend[0]},{LR_recommend[1]},{LR_recommend[2]}"
         
         # columns = ['Last_Run'          ,'Stock'             ,'Last_Price'     ,'%Std. Dev.','$Std. Dev.','Supertrend_Winner' ,'Supertrend_Result','ST_Signal_Date', 'Days@ST',
-        #            'LR_Best_Model'     ,'LR_Next_Day_Recomm', 'SMA_Crossed_Up','SMA_X_Date'             ,'SMA_FastXSlow'     , 'Beta'         , 
+        #            'LR_Best_Model'     ,'LR_Next_Day_Recomm', 'SMA_Crossed_Up','SMA_X_Date'             ,'SMA_FastXSlow'     ,  'EMA_Trend', 'EMA_FastXSlow', 'EMA_Lookback',
+        #            'Beta'         , 
         #            'SharpeRatio'                  ,'CAPM'              ,'Daily_VaR'  ]
     
         if run_update_models:
@@ -467,8 +479,8 @@ def recommendation_table(eval_df,stock_list, lookback_years=1, sma_fast=40, sma_
             model_str = 'N/A'
             
         new_row = [today           , s                  , close_price          ,f"+/-{std_dev_pct}%",f"+/-${std_dev_dlr}",    winner            , buysell         ,    buysell_date ,  days_at_ST,  
-                   model_str       , LR_recommend_str   , sma_sig              , sma_date           , fastXslow          ,    beta              , 
-                   Sharpe          , CAPM            , VaR  ]    
+                   model_str       , LR_recommend_str   , sma_sig              , sma_date           , fastXslow          ,    ema_trend         ,  ema_fast_slow_str,   ema_trend_lookback,
+                   beta              , Sharpe          , CAPM            , VaR  ]    
         
         eval_df = add_update(eval_df=eval_df,values = new_row)
         
@@ -523,7 +535,7 @@ def recommend_selling_strategy(lookback_years,stock_list,multiple_of_std_dev):
 
 
 # %%
-def eval_all_sp500(lookback_years = 1,sma_fast = 50, sma_slow = 200, regenerate_models = False ):
+def eval_all_sp500(lookback_years = 1,sma_fast = 50, sma_slow = 200, ema_trend_fast=20,ema_trend_slow=40, ema_trend_lookback=7,regenerate_models = False ):
     n,m,sp_df = load_sp500_list()
     stocks_sp500 = sp_df.Symbol.values
     stocks_sp500 = [s.strip().upper() for s in list(stocks_sp500)]
@@ -533,12 +545,17 @@ def eval_all_sp500(lookback_years = 1,sma_fast = 50, sma_slow = 200, regenerate_
                                 stock_list=stocks_sp500, 
                                 lookback_years=lookback_years, 
                                 sma_fast=sma_fast, 
+                                ema_trend_fast=ema_trend_fast,
+                                ema_trend_slow=ema_trend_slow,
+                                ema_trend_lookback=ema_trend_lookback,
                                 sma_slow=sma_slow,run_update_models=regenerate_models)
     
     return eval_df
 
 # %%
-def eval_list_from_file(filename=os.path.dirname(__file__)+'/stocks_list.txt',lookback_years = 1,sma_fast = 50, sma_slow = 200 ,regenerate_models = False):
+def eval_list_from_file(filename=os.path.dirname(__file__)+'/stocks_list.txt',lookback_years = 1,sma_fast = 50, sma_slow = 200 ,
+                        ema_trend_fast=20,ema_trend_slow=40, ema_trend_lookback=7,
+                        regenerate_models = False):
     stocks_from_file = read_stocklist(filename=filename)
     stocks_from_file = [s.strip().upper() for s in list(stocks_from_file)]
     today = datetime.datetime.today().strftime("%Y-%m-%d")
@@ -548,7 +565,11 @@ def eval_list_from_file(filename=os.path.dirname(__file__)+'/stocks_list.txt',lo
                                 stock_list=stocks_from_file, 
                                 lookback_years=lookback_years, 
                                 sma_fast=sma_fast, 
-                                sma_slow=sma_slow,run_update_models=regenerate_models)
+                                sma_slow=sma_slow,
+                                ema_trend_fast=ema_trend_fast,
+                                ema_trend_slow=ema_trend_slow,
+                                ema_trend_lookback=ema_trend_lookback,
+                                run_update_models=regenerate_models)
     
     return eval_df
 
@@ -629,15 +650,16 @@ fname = f'{results_dir}/Eval_Results_{datetime.datetime.today().strftime("%Y_%m_
 # ### Evaluate Stocks List
 
 # %%
-regenerate_models = True
+regenerate_models = False
 # symbols_file = os.path.dirname(__file__)+'/stocks_portfolio.txt'
 # symbols_file = os.path.dirname(__file__)+'/stocks_list.txt'
-symbols_file = os.path.dirname(__file__)+'/stocks_list2.txt' ## Inclusive of NASDAQ 100
+symbols_file = os.path.dirname(__file__)+'/stocks_list5.txt' ## Inclusive of NASDAQ 100
 # symbols_file = os.path.dirname(__file__)+'/stocks_list3.txt'
 # symbols_file = os.path.dirname(__file__)+'/sectors_etfs.txt'
 stocks_list = read_stocklist(symbols_file)  
 
-eval_df = eval_list_from_file(filename=symbols_file,lookback_years=2,sma_fast=50,sma_slow=100, regenerate_models=regenerate_models)
+eval_df = eval_list_from_file(filename=symbols_file,lookback_years=2,sma_fast=50,sma_slow=100, 
+                              ema_trend_fast=20, ema_trend_slow=40, ema_trend_lookback=7,regenerate_models=regenerate_models)
 # eval_df_from_file = eval_df
 # eval_df = eval_all_sp500(lookback_years=2,sma_fast=50,sma_slow=200, regenerate_models=regenerate_models)
 ## write_to_csv(eval_df)
@@ -748,6 +770,8 @@ email_body_html = email_body_html + stock_list
 # End html body
 email_body_html = email_body_html +"</body>\n" + "</html>"
 
+email_subject = "Stocks: Buy, Buy, and More Buy"
+
 # email_body_html = buys_eval_df.to_html()
 send_email(recipient=recipient_email, subject=email_subject, body=email_body_html, html=True )
 
@@ -789,6 +813,49 @@ print(f"{len(buys_safe)} Stocks:",flush=True)
 print(','.join(buys_safe['Stock'].astype(str)),flush=True)
 display(HTML(buys_safe.to_html(index=False)))
 ret = df_to_html_file(buys_safe,"/var/www/html/home/viewable_pages/all_roads_lead_to_up_safe.php","All Roads Lead to UP & Safe") 
+
+# START AN EMAIL
+email_body =  " Run is Done! \n"+buys_safe.to_string()
+page_header = ''' 
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"> </head>'''
+        
+
+# Start of html body
+email_body_html = page_header + "\n<body>"
+# ########################################
+
+
+# ADD TO EMAIL BODY
+# ########################################
+# BuyBuyBuy tables 
+email_body_html = email_body_html + "<h2>All Roads Lead to UP & Safe</h2>"
+email_body_html = email_body_html + buys_safe.to_html(border=True,index=False)
+
+
+# Make a comma separated list of stocks in one line
+# linktext = "https://finviz.com/quote.ashx?t=????&p=d"
+linktext = "https://digital.fidelity.com/prgw/digital/research/quote/dashboard/summary?symbol=????"
+buys_safe1 = buys_safe.copy()
+buys_safe1 = make_text_clickable(buys_safe1,'Stock',linktext,'????')
+
+stock_list = ', '.join(buys_safe1['Stock'].astype(str))
+email_body_html = email_body_html + stock_list
+# ##########################################
+
+
+# SEND EMAIL NOW
+# End html body
+email_body_html = email_body_html +"</body>\n" + "</html>"
+
+email_subject = "Stocks: All Roads Lead to UP & Safe"
+
+# email_body_html = buys_eval_df.to_html()
+send_email(recipient=recipient_email, subject=email_subject, body=email_body_html, html=True )
+
 
 # %% [markdown]
 # ### Save the Safe-Buys as Top Picks

@@ -261,7 +261,7 @@ def create_model(stock):
 
 
     # Make predictions for next 5 days
-    first_value = df_in['Close'][0]
+    first_value = df_in.at[df_in.index[0], 'Close']
     df_pred = df_in.copy()
     # print(first_value)
 
@@ -468,7 +468,12 @@ def create_model(stock):
         arr_m1 = np.append(last_five_days.iloc[i-1, :].values, next_day_m1[0])
         arr_m2 = np.append(arr_m1,next_day_m2[0])
         arr_df = pd.DataFrame([arr_m2], columns=new_columns)
-        next_five_days= pd.concat([next_five_days,arr_df])
+        
+
+        next_five_days = (next_five_days.copy() if arr_df.empty else arr_df.copy() if next_five_days.empty
+                            else pd.concat([next_five_days, arr_df]) # if both DataFrames non empty
+                        )
+        # next_five_days= pd.concat([next_five_days,arr_df])
         
     # Create the next 5 working dates and make an index for the predicted 5 days
     import datetime
@@ -570,7 +575,9 @@ def create_model(stock):
 
     def backtest(df_prices, buy_sell_signals, start_date=None, end_date=None,amount=100000):
         
-        df_bt = df_prices.join(buy_sell_signals, how='outer').fillna(method='ffill')
+        # Join DataFrames and use ffill() for forward fill
+        df_bt = df_prices.join(buy_sell_signals, how='outer').ffill()
+        # df_bt = df_prices.join(buy_sell_signals, how='outer').fillna(method='ffill')
         
         df_bt = DatesRange(df_bt, start=start_date, end=end_date)
         df_transactions = pd.DataFrame(np.zeros((len(df_bt), 8)),
@@ -656,7 +663,7 @@ def create_model(stock):
     # print("\n####################### MODEL model_1 #####################")
     # # df_tran = backtest(df_in,df_pred1.Predicted,start_date='2022-01-01',end_date='2023-01-01')
     df_tran = backtest(df_in,df_pred1.Predicted,start_date=start_date,amount=invest_mount)
-    returns = df_tran.ROI_pcnt[-1]
+    returns = df_tran.ROI_pcnt.iloc[-1]
     returns_model1 = returns
 
 
@@ -673,7 +680,8 @@ def create_model(stock):
     # print("\n####################### MODEL model_2 #####################")
     # # df_tran = backtest(df_in,df_pred1.Predicted,start_date='2022-01-01',end_date='2023-01-01')
     df_tran = backtest(df_in,df_pred2.Predicted,start_date=start_date,amount=invest_mount)
-    returns = df_tran.ROI_pcnt[-1]
+    returns = df_tran.ROI_pcnt.iloc[-1]
+    
     returns_model2 = returns
 
     # print(f"\nAI PREDICTION ENGINE Strategy:\n\tReturn on Investment : {returns}%\n\tEnding Account Value : ${df_tran['Account_Value'].iloc[-1]}")
