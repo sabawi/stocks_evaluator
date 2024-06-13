@@ -247,7 +247,7 @@ def process_df_data(buy_eval_df):
     processing_date = datetime.strptime("2000-01-01", "%Y-%m-%d")
     
     for _, row in buy_eval_df.iterrows():
-        last_run, stock, last_price = row["Last Run"], row["Stock"], row["Last Price"]
+        last_run, stock, last_price = row["Last_Run"], row["Stock"], row["Last_Price"]
         date_last_run = datetime.strptime(last_run, "%Y-%m-%d")
         stock = stock.strip()
         
@@ -321,9 +321,9 @@ def query_distinct_dates(conn, table_name):
     # Use strftime('%Y-%m-%d') to format dates consistently for comparison
     # Adapt the format string if your dates are stored differently
     sql_statement = f"""
-        SELECT DISTINCT "Last Run" 
+        SELECT DISTINCT "Last_Run" 
         FROM {table_name} 
-        ORDER BY 'Last Run' ASC;
+        ORDER BY 'Last_Run' ASC;
     """
 
     cursor.execute(sql_statement)
@@ -352,7 +352,7 @@ def get_eval_by_date(conn, datestr):
 
     sql_statement = f"""
         SELECT * FROM stock_data 
-        WHERE "Last Run" = ?;
+        WHERE "Last_Run" = ?;
     """
 
     cursor.execute(sql_statement, (datestr,))  # Use tuple for parameter substitution
@@ -371,17 +371,17 @@ def get_eval_by_date(conn, datestr):
 
 def screen_for_buys(eval_df, ignore_supertrend_winners=False):
         if not ignore_supertrend_winners:
-                buys_df = eval_df[ (eval_df['Supertrend Winner']==True) &  
-                        (eval_df['Supertrend Result']=='Buy') & 
-                        (eval_df['LR Next_Day Recomm'] == 'Buy,Buy,Buy') &
-                        (eval_df['SMA Crossed_Up']=='Buy')].sort_values(by=['Supertrend Winner','Supertrend Result',
-                                                                            'ST Signal_Date','SMA Crossed_Up','SMA_X_Date'],
+                buys_df = eval_df[ (eval_df['Supertrend_Winner']==True) &  
+                        (eval_df['Supertrend_Result']=='Buy') & 
+                        (eval_df['LR_Next_Day_Recomm'] == 'Buy,Buy,Buy') &
+                        (eval_df['SMA_Crossed_Up']=='Buy')].sort_values(by=['Supertrend_Winner','Supertrend_Result',
+                                                                            'ST_Signal_Date','SMA_Crossed_Up','SMA_X_Date'],
                                                                         ascending=[False,True,False,True,False])
         else:
-                buys_df = eval_df[ (eval_df['Supertrend Result']=='Buy') & 
-                        (eval_df['LR Next_Day Recomm'] == 'Buy,Buy,Buy') &
-                        (eval_df['SMA Crossed_Up']=='Buy')].sort_values(by=['Supertrend Winner','Supertrend Result',
-                                                                            'ST Signal_Date','SMA Crossed_Up','SMA_X_Date'],
+                buys_df = eval_df[ (eval_df['Supertrend_Result']=='Buy') & 
+                        (eval_df['LR_Next_Day_Recomm'] == 'Buy,Buy,Buy') &
+                        (eval_df['SMA_Crossed_Up']=='Buy')].sort_values(by=['Supertrend Winner','Supertrend_Result',
+                                                                            'ST_Signal_Date','SMA_Crossed_Up','SMA_X_Date'],
                                                                         ascending=[False,True,False,True,False])            
         
         return buys_df
@@ -403,16 +403,16 @@ def filter_list(datestr, filter_name, conn):
     match filter_name:
         case "buybuybuy":
             result = screen_for_buys(eval_df=result,ignore_supertrend_winners=False)
-            result = result.sort_values('Daily VaR',ascending=False).sort_values('%Sharpe Ratio',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
+            result = result.sort_values('Daily_VaR',ascending=False).sort_values('Sharpe_Ratio%',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
         case "buybuybuy_not_st":
             result = screen_for_buys(eval_df=result,ignore_supertrend_winners=True)
-            result = result.sort_values('Daily VaR',ascending=False).sort_values('%Sharpe Ratio',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
+            result = result.sort_values('Daily_VaR',ascending=False).sort_values('Sharpe_Ratio%',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
         case "all_up_safe":
             result = screen_for_buys(eval_df=result,ignore_supertrend_winners=False)
-            result = result.sort_values('Daily VaR',ascending=False).sort_values('%Sharpe Ratio',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
-            result = result[(result['Beta']>0.8) & (result['Beta']<2) ].sort_values(by='SMA_X_Date', ascending=False).sort_values('Daily VaR',ascending=False)
+            result = result.sort_values('Daily_VaR',ascending=False).sort_values('Sharpe_Ratio%',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
+            result = result[(result['Beta']>0.8) & (result['Beta']<2) ].sort_values(by='SMA_X_Date', ascending=False).sort_values('Daily_VaR',ascending=False)
         case "smx_st_win":
-            result = result[(result['SMA Crossed_Up'] == 'Buy') & (result['Supertrend Result'] == 'Buy') & (result['Supertrend Winner'] == True) ].sort_values('SMA_X_Date', ascending=False)
+            result = result[(result['SMA_Crossed_Up'] == 'Buy') & (result['Supertrend_Result'] == 'Buy') & (result['Supertrend_Winner'] == True) ].sort_values('SMA_X_Date', ascending=False)
         case _:
             print(f"No such pre-programmed filter '{filter_name}'")
             
@@ -491,10 +491,10 @@ def report_buy_sell_backtest(inDate, recommendation_filter, stock, is_plot):
         output += ("Filter NOT found<br>")
     
     sql_statement = f"""
-        select "Last Run", "Stock" , "Last Price" 
+        select "Last_Run", "Stock" , "Last_Price" 
         from stock_data 
-        where "Last Run" >= {inDate}
-        ORDER BY "Last Run";
+        where "Last_Run" >= {inDate}
+        ORDER BY "Last_Run";
         """
     cursor = query_data(conn, sql_statement)
     process_data(cursor,conn=conn,filter_name=recommendation_filter)
@@ -550,6 +550,7 @@ def report_buy_sell_backtest(inDate, recommendation_filter, stock, is_plot):
     backtest = bt(df_in=df_prices, signals=df_pred, start_date=start_date, end_date=None, amount=invest_amount)
     output += backtest.run_html(stock)
     tran_history = backtest.get_tran_history()
+    
     # print(tran_history)
     output += backtest.results_html(stock)
     
@@ -571,6 +572,9 @@ def plot_account_image_route(inDate, recommendation_filter, stock):
     db_file = "data.db"  # Replace with your actual database filename
     conn = connect_db(db_file)
     data = {}
+    
+    # Go back 100 days
+    inDate = (datetime.strptime(start_date, "%Y-%m-%d") - timedelta(days=100)).strftime("%Y-%m-%d")
     
     # Define column names and data types
     filter_columns = ['FilterName', 'Description', 'Comments']
@@ -605,9 +609,9 @@ def plot_account_image_route(inDate, recommendation_filter, stock):
         
     
     sql_statement = """
-        select "Last Run", "Stock" , "Last Price" 
+        select "Last_Run", "Stock" , "Last_Price" 
         from stock_data 
-        ORDER BY "Last Run";
+        ORDER BY "Last_Run";
         """
     cursor = query_data(conn, sql_statement)
     process_data(cursor,conn=conn,filter_name=recommendation_filter)
@@ -714,9 +718,9 @@ def main():
         print("Filter NOT found")
     
     sql_statement = """
-        select "Last Run", "Stock" , "Last Price" 
+        select "Last_Run", "Stock" , "Last_Price" 
         from stock_data 
-        ORDER BY "Last Run";
+        ORDER BY "Last_Run";
         """
     cursor = query_data(conn, sql_statement)
     process_data(cursor,conn=conn,filter_name=filter_name)

@@ -46,8 +46,8 @@ class SignalsBacktester:
         self.signals = pd.DataFrame(signals,columns=['Predicted'],index=self.df_in.index)
         self.print_details = True
         self.amount = amount
-        self.tran_history = None
-        self.buy_and_hold_results = None
+        self.tran_history = pd.DataFrame()
+        self.buy_and_hold_results = pd.DataFrame()
         
         # Fix the start and end dates to be Business days
         if start_date:
@@ -93,6 +93,10 @@ class SignalsBacktester:
 
         df_bt = self.df_in.join(self.signals, how='outer').fillna(method='ffill')
         df_bt = self.DatesRange(df_bt)
+        
+        if(len(df_bt)<2):
+            return df_bt
+        
         
         df_transactions = pd.DataFrame(np.zeros((len(df_bt), 9)),
                                     columns=['Buy_Count','Buy_Amount','Sell_Count','Sell_Amount',
@@ -288,6 +292,10 @@ class SignalsBacktester:
         print("in plot_account_image() Hi World",flush=True)
 
         tmp_trans_hist = self.get_tran_history()
+        if(tmp_trans_hist.shape[0] == 0):
+            img = io.BytesIO()
+            return img
+        
         print(tmp_trans_hist["Account_Value"])
         # trans_hist = tmp_trans_hist.iloc[1:]
         trans_hist = tmp_trans_hist
@@ -420,6 +428,11 @@ class SignalsBacktester:
 
         # df_tran = backtest(df_in,df_pred1.Predicted,start_date='2022-01-01',end_date='2023-01-01')
         df_tran = self.backtest()
+        
+        # Quit if there are less than 2 transactions 
+        if(len(df_tran)<2):
+            return output
+        
         returns = df_tran.ROI_pcnt[-1]
         html_output,buy_and_hold_ROI,ending_account_value = self.buy_and_hold_strategy_html()
         output += html_output
@@ -479,6 +492,11 @@ class SignalsBacktester:
 
     def results_html(self,stock):
         tran_history = self.get_tran_history()
+        
+        # if there are less than 2 transactions we cannot backtest and we need to quit
+        # print(tran_history)
+        if(tran_history.shape[0] == 0):
+            return ""
 
         max_account_value = tran_history[(tran_history['Account_Value'] == tran_history['Account_Value'].max())]
         if tran_history['Buy_Count'].sum() > 0:

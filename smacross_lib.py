@@ -120,7 +120,7 @@ def sma_xing(data:pd.DataFrame,fast_sma:int, slow_sma:int):
         ret_date = None
         
         
-    return ret_signal, ret_date, (fast_sma,slow_sma)
+    return ret_signal, ret_date, f"({fast_sma}X{slow_sma})"
 
     # plot_data = stock_data.iloc[-1000:].copy()
     # ax = plt.plot(plot_data['Close'], linewidth = 2)
