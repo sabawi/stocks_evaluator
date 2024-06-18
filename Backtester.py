@@ -296,14 +296,14 @@ class SignalsBacktester:
             img = io.BytesIO()
             return img
         
-        print(tmp_trans_hist["Account_Value"])
+        # print(tmp_trans_hist["Account_Value"])
         # trans_hist = tmp_trans_hist.iloc[1:]
         trans_hist = tmp_trans_hist
         
         shares_to_buy = int(tmp_trans_hist.iloc[1].Buy_Hold / self.df_in.iloc[1].Open)
-        print(f"\nDate={tmp_trans_hist.index[1]}, Share Price = {self.df_in.iloc[1].Open}, number of share = {shares_to_buy}\n")
+        # print(f"\nDate={tmp_trans_hist.index[1]}, Share Price = {self.df_in.iloc[1].Open}, number of share = {shares_to_buy}\n")
         
-        print(trans_hist.Buy_Hold)
+        # print(trans_hist.Buy_Hold)
         
         plt.figure(figsize=(15, 8))
         plt.grid(True, which='both', linestyle='--', linewidth=0.5, color='gray')

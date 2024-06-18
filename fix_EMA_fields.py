@@ -77,6 +77,22 @@ def query_data(conn, sql_statement):
 
     return cursor
 
+def update_momentum_record(conn,date_str,stock,mom_str,confirm_str,days_in_confirm):
+    
+    cursor = conn.cursor()
+    update_stmt = f"""
+    UPDATE stock_data
+    SET Momentum = '{mom_str}', Confirmation = '{confirm_str}', Mom_Days_Confirmed = {days_in_confirm}
+    WHERE Stock = '{stock}' AND Last_Run = '{date_str}' 
+    """
+    print(update_stmt)
+    cursor.execute(update_stmt)
+    conn.commit()   
+    cursor.close()
+    
+    return
+
+
 def update_record(conn,date_str,stock,new_ema_trend, new_fastslow, new_lookback,ema_days_at_buy):
     
     cursor = conn.cursor()
@@ -121,6 +137,80 @@ def fix_EMA_in_db(in_stock,df,fast=20,slow=40,lookback=7):
         update_record(conn=conn_sqlite3,date_str=idx.strftime('%Y-%m-%d'),stock=in_stock,new_ema_trend=new_ema_trend,new_fastslow=f"({fast}X{slow})",new_lookback=lookback,ema_days_at_buy=ema_days_at_buy )
         update_record(conn=conn_mysql,date_str=idx.strftime('%Y-%m-%d'),stock=in_stock,new_ema_trend=new_ema_trend,new_fastslow=f"({fast}X{slow})",new_lookback=lookback,ema_days_at_buy=ema_days_at_buy )
 
+def fix_Momentum_in_db(in_stock,df,fast=20,slow=40,lookback=7):
+    if df == None:
+        df = yf.download(in_stock,start="2023-01-01",period='1d',progress=False)
+    
+    last_date, current_recommendation,df_ema_recommendations, ema_days_at_buy  = ta.calculate_pdta_alphatrend(stock=in_stock,df=df,Fast_EMA=fast,Slow_EMA=slow,Lookback=lookback)
+
+    df_trend_pdta = ta.get_momentum_indicators(df_ema_recommendations)
+    # print(df_trend_pdta[['Buy_Sell_Signal','Mom_Signal']])
+    # print(df_trend_pdta.columns)
+    
+    df_trend_pdta['Confirmation'] = 0
+    
+    for idx,row in df_trend_pdta.iterrows():
+        if  df_trend_pdta.loc[idx,'Buy_Sell_Signal'] == 1 and df_trend_pdta.loc[idx,'Mom_Signal'] == 1 :
+            df_trend_pdta.loc[idx,'Confirmation'] = 1
+        else:
+            df_trend_pdta.loc[idx,'Confirmation'] = -1
+    
+    conn_sqlite3 = connect_db_sqlite3(db_file='data.db')
+    conn_mysql = connect_db_mysql()
+    
+    # Determine if Momentum is confirmed if both signals are 1
+    # last_momentum = df_trend_pdta['Mom_Signal'].index[-1]
+    # last_ema_trend = df_trend_pdta['Buy_Sell_Signal'].index[-1]
+        
+    for idx,row in  df_trend_pdta.iterrows():
+        consecutive_confirm_days = 0
+        
+        if df_trend_pdta.loc[idx,'Mom_Signal'] == 1 :
+            last_momentum_str = 'Buy'
+        else: 
+            last_momentum_str = 'Sell'
+        if df_trend_pdta.loc[idx,'Confirmation'] == 1:
+            confirmation_str = 'Buy'
+            
+            # Find the number of days in 'Buy' recommendations
+            # print(idx)
+            for date in reversed(df_trend_pdta.index[df_trend_pdta.index <= idx]):
+                if df_trend_pdta.loc[date, 'Buy_Sell_Signal'] == 1 & df_trend_pdta.loc[date,'Mom_Signal'] == 1:
+                    # date_str2 = date.strftime('%Y-%m-%d')
+                    
+                    consecutive_confirm_days += 1
+                    # print(f"Buy Confirmed on {date_str2}, Days in Buy = {consecutive_confirm_days}")                
+                else:
+                    break              
+        else:
+            confirmation_str = 'Sell'
+            
+        print(f" UPDATING: :\n\t date_str: {idx.strftime('%Y-%m-%d')}\n\tStock:{in_stock}\n\tmomentum_str:{last_momentum_str} \n\tconfirm_str:{confirmation_str}\n\tDays in Confirmation:{consecutive_confirm_days}\n")
+        
+        
+
+    # consecutive_confirm_days = 0
+    # # if both signals are 1 then we have confirmation
+    # if last_ema_trend == 1 and last_momentum == 1:
+    #     last_confirmation_str = 'Buy'
+    #     # Carculate days count in confirmed momentum 
+            
+    #     # Find the number of days in 'Buy' recommendations
+    #     for date in reversed(df_trend_pdta.loc[last_date]):
+    #         # date_str = date.strftime('%Y-%m-%d')
+    #         if df_trend_pdta.loc[date, 'Buy_Sell_Signal'] == 1 & df_trend_pdta.loc[date,'Mom_Signal'] == 1:
+    #             consecutive_confirm_days += 1
+    #         else:
+    #             break            
+    # else:
+    #     last_confirmation_str = 'Sell'
+    #     consecutive_confirm_days = -1
+                
+    # print(f"***Stock={in_stock} = {last_date}\nlast_momentum_str={last_momentum_str}\nlast_confirmation_str={last_confirmation_str}\nconsecutive_confirm_days={consecutive_confirm_days}")
+
+
+    # update_momentum_record(conn_mysql,date_str=idx.strftime('%Y-%m-%d'),stock=in_stock,confirm_str=row[''],days_in_confirm)
+
 if __name__=="__main__":
     conn = connect_db_mysql()
     # conn = connect_db_sqlite3(db_file='data.db')
@@ -139,10 +229,15 @@ if __name__=="__main__":
     Lookback = 7
 
     stocks_list = get_stocks_list_from_db(conn)
-    for i in range(len(stocks_list)):
-        stock = stocks_list[i][0]
+    fix_Momentum_in_db('AAPL',df)
+    # for i in range(len(stocks_list)):
+    #     stock = stocks_list[i][0]
         
-        fix_EMA_in_db(stock,df,fast=Fast_EMA,slow=Slow_EMA,lookback=Lookback)
-        # time.sleep(0.5)
+    #     # fix_EMA_in_db(stock,df,fast=Fast_EMA,slow=Slow_EMA,lookback=Lookback)
+        
+    #     fix_Momentum_in_db(stock,df)
+        
+    #     time.sleep(0.5)
+        
     # df_updated = get_rows_by_stock(conn=conn,stock=stock)
     # print(df_updated)

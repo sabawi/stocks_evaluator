@@ -14,6 +14,7 @@ import CAPM_lib as capm
 import LR_run_model_lib as LR_run
 import LR_model_lib as LR_models
 import ta_verifer as ema_trend_ind
+import ema_indicator_lib as ema_lib
 import yfinance as yf
 pd.set_option('display.max_rows', 200)
 from IPython.display import display, HTML
@@ -75,12 +76,14 @@ def create_directory(dir_path):
 
 # %%
 def save_list_to_file(sublist,dir_path='.',list_filename='unamed_list.csv'):
-    
     subdirectory_path = create_directory(dir_path)
     full_filename = os.path.join(subdirectory_path,list_filename)
+    print(f"Saving {full_filename} to disk ...",end='',flush=True)
     with open( full_filename, 'w') as f:
         f.write(sublist)
         print(f'"{full_filename}" updated!',flush=True)
+    
+    print("...Done!",flush=True)
 
 
 import mysql.connector as mysqlpy
@@ -192,7 +195,7 @@ def insert_data_into_database_error(df):
     df_copy['EMA_Lookback'] = df_copy['EMA_Lookback'].astype(int)
 
     # Print the DataFrame column names for debugging
-    print("DataFrame columns:", df_copy.columns)
+    # print("DataFrame columns:", df_copy.columns)
 
     # Connect to the MySQL database
     conn = mysqlpy.connect(
@@ -215,11 +218,11 @@ def insert_data_into_database_error(df):
     query = f'''INSERT INTO stock_data ({', '.join(columns)})
                 VALUES ({placeholders})'''
 
-    print("Generated Query:", query)  # Debugging statement
+    # print("Generated Query:", query)  # Debugging statement
 
     # Iterate through each row in the DataFrame
     for index, row in df_copy.iterrows():
-        print(f"\nRow from the DataFrame: {row}\n")
+        # print(f"\nRow from the DataFrame: {row}\n")
         # Check if the combination of 'Last_Run' and 'Stock' already exists in the table
         cursor.execute('''SELECT COUNT(*) FROM stock_data WHERE `Last_Run` = %s AND `Stock` = %s''',
                        (row['Last_Run'], row['Stock']))
@@ -246,7 +249,7 @@ def insert_data_into_database_error(df):
             # Prepare data tuple
             # data = tuple(row[col] for col in columns)
 
-            print(f"Final Query:\n{query}\nData:{data_list}")
+            # print(f"Final Query:\n{query}\nData:{data_list}")
             # Insert data using cursor.execute
             # cursor.execute(query, data)
             cursor.executemany(query, data_list)
@@ -259,6 +262,8 @@ def insert_data_into_database_error(df):
 
 
 def insert_data_into_database(df):
+    
+    print("Inserting data into MySQL Database table....",end='',flush=True)
     # Make a copy of the DataFrame to avoid modifying the original DataFrame
     df_copy = df.copy()
     
@@ -302,31 +307,37 @@ def insert_data_into_database(df):
             data = tuple(row)
 
             # Print the length of column_names and a sample data list to compare
-            print(f"Number of columns: {len(column_names)}")
-            print(f"Sample data list: {data[:5]}")  # Print only the first 5 elements
+            # print(f"Number of columns: {len(column_names)}")
+            # print(f"Sample data list: {data[:5]}")  # Print only the first 5 elements
 
             column_list = f"""`Last_Run`, `Stock`, `Last_Price`, `Std._Dev.%`, `$Std._Dev.`,
                             `Supertrend_Winner`, `Supertrend_Result`, `ST_Signal_Date`, `Days@ST`,
                             `LR_Best_Model`, `LR_Next_Day_Recomm`, `SMA_Crossed_Up`, `SMA_X_Date`,
                             `SMA_FastXSlow`, `Beta`, `Sharpe_Ratio%`, `CAPM`, `Daily_VaR`,
-                            `EMA_Trend`, `EMA_Days_at_Buy`, `EMA_FastXSlow`, `EMA_Lookback`"""
+                            `EMA_Trend`, `EMA_Days_at_Buy`, `EMA_FastXSlow`, `EMA_Lookback`,
+                            `Momentum`, `Confirmation`, `Mom_Days_Confirmed`"""
             data_str =    f""" "{row['Last_Run']}", "{row['Stock']}", {row['Last_Price']}, "{row['Std._Dev.%']}", "{row['$Std._Dev.']}",
                             {row['Supertrend_Winner']}, "{row['Supertrend_Result']}", "{row['ST_Signal_Date']}", {row['Days@ST']},
                             "{row['LR_Best_Model']}", "{row['LR_Next_Day_Recomm']}", "{row['SMA_Crossed_Up']}", "{row['SMA_X_Date']}",
                             "{row['SMA_FastXSlow']}", {row['Beta']}, {row['Sharpe_Ratio%']}, {row['CAPM']}, {row['Daily_VaR']},
-                            "{row['EMA_Trend']}", {row['EMA_Days_at_Buy']},"{row['EMA_FastXSlow']}", {int(row['EMA_Lookback'])} """
+                            "{row['EMA_Trend']}", {row['EMA_Days_at_Buy']},"{row['EMA_FastXSlow']}", {int(row['EMA_Lookback'])},
+                            "{row['Momentum']}","{row['Confirmation']}", {int(row['Mom_Days_Confirmed'])}"""
             # Prepare parameterized INSERT query
             query = f"INSERT INTO stock_data ("+column_list+") VALUES (" +data_str + ");"
-            print(query)
+            # print(query)
             # Insert data using cursor.execute
             cursor.execute(query)
 
     # Commit changes and close connection
     conn.commit()
-    conn.close()       
+    conn.close()     
+    print("... Done!",flush=True)
+      
 import sqlite3
 
 def insert_data_into_database_old(df):
+    print("Inserting data into SQLite3 Database table....",end='',flush=True)
+    
     # Make a copy of the DataFrame to avoid modifying the original DataFrame
     df_copy = df.copy()
     
@@ -352,7 +363,7 @@ def insert_data_into_database_old(df):
 
         # If the combination already exists, skip insertion
         if result > 0:
-            print(f"Skipping insertion for row {index+1}: Date {row['Last_Run']} and Stock {row['Stock']} already exists.", flush=True)
+            print(f"SQLite3 Skipping insertion for row {index+1}: Date {row['Last_Run']} and Stock {row['Stock']} already exists.", flush=True)
         else:
             # Print out the row values before insertion
             # print(f"Inserting row {index+1}: {row}")
@@ -369,17 +380,21 @@ def insert_data_into_database_old(df):
                                 `Supertrend_Winner`, `Supertrend_Result`, `ST_Signal_Date`, 
                                 `Days@ST`, `LR_Best_Model`, `LR_Next_Day_Recomm`, `SMA_Crossed_Up`, 
                                 `SMA_X_Date`, `SMA_FastXSlow`, `Beta`, `Sharpe_Ratio%`, `CAPM`, 
-                                `Daily_VaR`, `EMA_Trend`, `EMA_FastXSlow`, `EMA_Lookback`, `EMA_Days_at_Buy`
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                                `Daily_VaR`, `EMA_Trend`, `EMA_FastXSlow`, `EMA_Lookback`, `EMA_Days_at_Buy`, 
+                                `Momentum`, `Confirmation`, `Mom_Days_Confirmed`
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                            (row['Last_Run'], row['Stock'], row['Last_Price'], row['Std._Dev.%'], row['$Std._Dev.'],
                             row['Supertrend_Winner'], row['Supertrend_Result'], row['ST_Signal_Date'], row['Days@ST'],
                             row['LR_Best_Model'], row['LR_Next_Day_Recomm'], row['SMA_Crossed_Up'], row['SMA_X_Date'],
                             row['SMA_FastXSlow'], row['Beta'], row['Sharpe_Ratio%'], row['CAPM'], row['Daily_VaR'],
-                            row['EMA_Trend'], row['EMA_FastXSlow'], row['EMA_Lookback'], row['EMA_Days_at_Buy']))
+                            row['EMA_Trend'], row['EMA_FastXSlow'], row['EMA_Lookback'], row['EMA_Days_at_Buy'],
+                            row['Momentum'], row['Confirmation'], row['Mom_Days_Confirmed']))
 
     # Commit changes and close connection
     conn.commit()
     conn.close()
+    print("Done!",flush=True)
+    
 # Example usage:
 # insert_data_into_database(eval_df)
 
@@ -403,6 +418,7 @@ from prettytable import PrettyTable
 
 def df_to_html_file(input_df, output_file_name, table_title):
     
+    print(f"Saving HTML file {output_file_name} ...",end='',flush=True)
     # Create a PrettyTable object
     table = PrettyTable(input_df.columns.tolist())
 
@@ -480,6 +496,8 @@ def df_to_html_file(input_df, output_file_name, table_title):
     # Save the HTML table to the file
     with open(output_file_name, 'w') as f:
         f.write(html_page)
+        
+    print("...Done!",flush=True)
 
 
 # %% [markdown]
@@ -554,12 +572,12 @@ def run_supertrend(stock,start_date):
 # %%
 def init_eval_table():
     columns = ['Last_Run'          ,'Stock'             ,'Last_Price'     ,'Std._Dev.%','$Std._Dev.','Supertrend_Winner' ,'Supertrend_Result','ST_Signal_Date', 'Days@ST',
-               'LR_Best_Model'     ,'LR_Next_Day_Recomm', 'SMA_Crossed_Up','SMA_X_Date'        ,'SMA_FastXSlow'    , 'EMA_Trend', 'EMA_Days_at_Buy','EMA_FastXSlow', 'EMA_Lookback',
-               'Beta'         , 'Sharpe_Ratio%'                  ,'CAPM'              ,'Daily_VaR'  ]
+               'LR_Best_Model'     ,'LR_Next_Day_Recomm', 'SMA_Crossed_Up','SMA_X_Date'      ,'SMA_FastXSlow' , 'EMA_Trend', 'EMA_Days_at_Buy','EMA_FastXSlow', 'EMA_Lookback',
+               'Momentum'          , 'Confirmation'     ,'Mom_Days_Confirmed', 'Beta'          , 'Sharpe_Ratio%'                  ,'CAPM'              ,'Daily_VaR'  ]
 
-    dtypes = ['datetime64[ns]'       , str                , float            ,str      ,str        , bool              , str               , 'datetime64[ns]'            , float,
-              str                  , str                , str              , 'datetime64[ns]'      , str               , str               , float            , str            , float,
-              float          , float                , float                , float        ]
+    dtypes = ['datetime64[ns]'     , str                , float            ,str         ,str        , bool              , str                , 'datetime64[ns]', float    ,
+              str                  , str                , str              , 'datetime64[ns]' , str          , str         , float            , str            , float         ,
+              str                  , str                ,float             ,float             , float                           , float               , float      ]
 
     # Initialize the DataFrame with empty rows
     eval_df = pd.DataFrame(columns=columns)
@@ -662,6 +680,37 @@ def recommendation_table(eval_df,stock_list, lookback_years=1, sma_fast=40, sma_
         
         ema_last_date,ema_trend, df_trend_pdta, ema_buy_days = ema_trend_ind.calculate_pdta_alphatrend(stock=s,df=stock_data,Fast_EMA=ema_trend_fast,
                                                                                       Slow_EMA=ema_trend_slow,Lookback=ema_trend_lookback)
+        df_trend_pdta = ema_lib.generate_signals(df_trend_pdta,fast_ema=ema_trend_fast,slow_ema=ema_trend_slow)
+        df_trend_pdta = ema_trend_ind.get_momentum_indicators(df_trend_pdta)
+        # print(df_trend_pdta[['Buy_Sell_Signal','Mom_Signal']])
+        
+        # Determine if Momentum is confirmed if both signals are 1
+        last_momentum = df_trend_pdta['Mom_Signal'].iloc[-1]
+        last_ema_trend = df_trend_pdta['Buy_Sell_Signal'].iloc[-1]
+        
+        if last_momentum == 1: 
+            last_momentum_str = 'Buy'
+        else: 
+            last_momentum_str = 'Sell'
+
+        consecutive_confirm_days = 0
+        # if both signals are 1 then we have confirmation
+        if last_ema_trend == 1 and last_momentum == 1:
+            last_confirmation_str = 'Buy'
+            # Carculate days count in confirmed momentum 
+            last_date = df_trend_pdta.index[-1]
+            
+            # Find the number of days in 'Buy' recommendations
+            for date in reversed(df_trend_pdta.index):
+                # date_str = date.strftime('%Y-%m-%d')
+                if df_trend_pdta.loc[date, 'Buy_Sell_Signal'] == 1 & df_trend_pdta.loc[date,'Mom_Signal'] == 1:
+                    consecutive_confirm_days += 1
+                else:
+                    break            
+        else:
+            last_confirmation_str = 'Sell'
+            consecutive_confirm_days = -1
+        
         print(f"{s}",end=',',flush=True)
         mean, std_dev = get_sigma(stock_data)
         # std_dev = get_gstd(stock_data)
@@ -677,8 +726,7 @@ def recommendation_table(eval_df,stock_list, lookback_years=1, sma_fast=40, sma_
         
         # columns = ['Last_Run'          ,'Stock'             ,'Last_Price'     ,'Std. Dev.%','$Std. Dev.','Supertrend_Winner' ,'Supertrend_Result','ST_Signal_Date', 'Days@ST',
         #            'LR_Best_Model'     ,'LR_Next_Day_Recomm', 'SMA_Crossed_Up','SMA_X_Date'             ,'SMA_FastXSlow'     ,  'EMA_Trend', 'EMA_Days_at_Buy','EMA_FastXSlow', 'EMA_Lookback',
-        #            'Beta'         , 
-        #            'SharpeRatio'                  ,'CAPM'              ,'Daily_VaR'  ]
+        #            'Momentum'          , 'Confirmation'     ,'Mom_Days_Confirmed','Beta'         ,  'SharpeRatio'                  ,'CAPM'              ,'Daily_VaR'  ]
     
         if run_update_models:
             model_str = stock_best_model_df[stock_best_model_df['Stock'] == s].Model.values[0]
@@ -687,9 +735,10 @@ def recommendation_table(eval_df,stock_list, lookback_years=1, sma_fast=40, sma_
             
         new_row = [today           , s                  , close_price          ,f"+/-{std_dev_pct}%",f"+/-${std_dev_dlr}",    winner            , buysell         ,    buysell_date ,  days_at_ST,  
                    model_str       , LR_recommend_str   , sma_sig              , sma_date           , fastXslow          ,    ema_trend         , ema_buy_days    ,  ema_fast_slow_str,   ema_trend_lookback,
-                   beta              , Sharpe          , CAPM            , VaR  ]    
+                   last_momentum_str   , last_confirmation_str  , consecutive_confirm_days, beta                 , Sharpe          , CAPM            , VaR  ]    
         
         eval_df = add_update(eval_df=eval_df,values = new_row)
+        # print(eval_df[['Stock','EMA_Trend','Momentum','Confirmation','Mom_Days_Confirmed']])
         
     print("Done!",flush=True)
     return eval_df
@@ -710,6 +759,7 @@ def recommend_selling_strategy(lookback_years,stock_list,multiple_of_std_dev):
     - $Recomm. Limit Price Order
     """
 
+    print("Calculating Exit Strategies ....",end="", flush=True)
     # Initialize the DataFrame with empty rows
     start_date = first_date_N_years_ago(lookback_years)
 
@@ -738,6 +788,7 @@ def recommend_selling_strategy(lookback_years,stock_list,multiple_of_std_dev):
             new_row = [s.upper()  , f"${round(close_price,2)}"    , f"{multiple_of_std_dev}x"     ,f"+/-{std_dev_pct}%",f"+/-${std_dev_dlr}",    f"{pct_drop}%",    f"${price_drop}"   ,  f"${round(min_trailing_stop_price,2)}"  , f"${limit_price}"]    
             sell_orders_recomm = add_update(eval_df=sell_orders_recomm,values = new_row)
             
+    print("....Done!",end="",flush=True)
     return sell_orders_recomm
 
 
@@ -818,6 +869,7 @@ def screen_for_sells(eval_df, ignore_supertrend_winners=False):
 
 
 def send_email(recipient, subject, body, html=False):
+    print(f"Sending EMAIL to {recipient}",end='',flush=True)
     # Construct the command to send the email
     if html:
         # Specify content type as HTML
@@ -828,17 +880,18 @@ def send_email(recipient, subject, body, html=False):
 
         # Use Mutt to send the email with the temporary file
         command = f"mutt  -e 'set content_type=text/html' -s '{subject}' {recipient}  < /tmp/stocks_email.txt"
-        print(message)
-        print("Content type = HTML",flush=True)
+        # print(message)
+        # print("Content type = HTML",flush=True)
     else:
         # Default to plain text content
         command = f'echo "{body}" | mutt -s "{subject}" {recipient}'
-        print(body,flush=True)
-        print("Content type = TEXT",flush=True)
+        # print(body,flush=True)
+        # print("Content type = TEXT",flush=True)
         # Execute the command
         
-    print(command,flush=True)
+    # print(command,flush=True)
     os.system(command)
+    print("...Done!",flush=True)
 
 
 # Example usage
@@ -878,8 +931,8 @@ insert_data_into_database_old(eval_df)
 # ### All Results
 
 # %%
-print(f"{len(eval_df)} Stocks:",flush=True)
-display(HTML(eval_df.sort_values(['ST_Signal_Date','SMA_X_Date'], ascending=False).to_html(index=False)))
+# print(f"{len(eval_df)} Stocks:",flush=True)
+# display(HTML(eval_df.sort_values(['ST_Signal_Date','SMA_X_Date'], ascending=False).to_html(index=False)))
 ret = df_to_html_file(eval_df,"/var/www/html/home/viewable_pages/stock_evaluation.php","Latest Stock Evaluation: All") 
 
 # %% [markdown]
@@ -892,10 +945,10 @@ my_stock_list = stocks_list
 multiple_of_std_dev = 1.5 # Stop Loss as percentage of Std.Dev.
 sell_orders_recomm = recommend_selling_strategy(lookback_years,my_stock_list,multiple_of_std_dev)
 
-print("Order Type: Limit Trailing Stop Loss Percent (%) Orders ONLY:  ",flush=True)
-print("=============================================================",flush=True)
-print(f"{len(sell_orders_recomm)} Stocks:",flush=True)
-display(HTML(sell_orders_recomm.to_html(index=False)))
+# print("Order Type: Limit Trailing Stop Loss Percent (%) Orders ONLY:  ",flush=True)
+# print("=============================================================",flush=True)
+# print(f"{len(sell_orders_recomm)} Stocks:",flush=True)
+# display(HTML(sell_orders_recomm.to_html(index=False)))
 ret = df_to_html_file(sell_orders_recomm,"/var/www/html/home/viewable_pages/exit_strategy.php","Exit Strategies Recommended <br>Order Type: Limit Trailing Stop Loss Percent (%) Orders ONLY") 
 
 # %% [markdown]
@@ -934,11 +987,11 @@ import time
 time.sleep(0.5)
 buys_eval_df= screen_for_buys(eval_df=eval_df,ignore_supertrend_winners=False)
 buys_eval_df = buys_eval_df.sort_values('Daily_VaR',ascending=False).sort_values('Sharpe_Ratio%',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
-print(f"{len(buys_eval_df)} Stocks:",flush=True)
+# print(f"{len(buys_eval_df)} Stocks:",flush=True)
 sublist = ','.join(buys_eval_df['Stock'].astype(str))
-print(sublist,flush=True)
+# print(sublist,flush=True)
 save_list_to_file(sublist,os.getcwd()+'/picked_stocks','BuyBuyBuy.csv')
-display(HTML(buys_eval_df.to_html(index=False)))
+# display(HTML(buys_eval_df.to_html(index=False)))
 ret = df_to_html_file(buys_eval_df,"/var/www/html/home/viewable_pages/buybuybuy.php","Buy, Buy, Buy Rated Stocks") 
 
 # START AN EMAIL
@@ -990,9 +1043,9 @@ send_email(recipient=recipient_email, subject=email_subject, body=email_body_htm
 time.sleep(0.5)
 buys_eval_df2= screen_for_buys(eval_df=eval_df,ignore_supertrend_winners=True)
 buys_eval_df2 = buys_eval_df2.sort_values(by='SMA_X_Date', ascending=False).sort_values('Sharpe_Ratio%',ascending=True).sort_values('Daily_VaR',ascending=False)
-print(f"{len(buys_eval_df2)} Stocks:",flush=True)
-print(','.join(buys_eval_df2['Stock'].astype(str)),flush=True)
-display(HTML(buys_eval_df2.to_html(index=False)))
+# print(f"{len(buys_eval_df2)} Stocks:",flush=True)
+# print(','.join(buys_eval_df2['Stock'].astype(str)),flush=True)
+# display(HTML(buys_eval_df2.to_html(index=False)))
 ret = df_to_html_file(buys_eval_df2,"/var/www/html/home/viewable_pages/buybuybuy2.php","Buy, Buy, Buy Rated Stocks (Not necessarily ST winners)") 
 
 # %% [markdown]
@@ -1006,9 +1059,9 @@ eval_df.to_csv(os.path.dirname(__file__)+"/stocks_buys_eval_df_table.csv")
 
 # %%
 sells_eval_df= screen_for_sells(eval_df=eval_df,ignore_supertrend_winners=True)
-print(f"{len(sells_eval_df)} Stocks:",flush=True)
-print(','.join(sells_eval_df['Stock'].astype(str)),flush=True)
-display(HTML(sells_eval_df.to_html(index=False)))
+# print(f"{len(sells_eval_df)} Stocks:",flush=True)
+# print(','.join(sells_eval_df['Stock'].astype(str)),flush=True)
+# display(HTML(sells_eval_df.to_html(index=False)))
 ret = df_to_html_file(sells_eval_df,"/var/www/html/home/viewable_pages/time_to_sell.php","Time to Sell") 
 
 # %% [markdown]
@@ -1017,10 +1070,11 @@ ret = df_to_html_file(sells_eval_df,"/var/www/html/home/viewable_pages/time_to_s
 # %%
 time.sleep(0.5)
 buys_safe = buys_eval_df[(buys_eval_df['Beta']>0.8) & (buys_eval_df['Beta']<2) ].sort_values(by='SMA_X_Date', ascending=False).sort_values('Daily_VaR',ascending=False)
-print(f"{len(buys_safe)} Stocks:",flush=True)
-print(','.join(buys_safe['Stock'].astype(str)),flush=True)
-display(HTML(buys_safe.to_html(index=False)))
+# print(f"{len(buys_safe)} Stocks:",flush=True)
+# print(','.join(buys_safe['Stock'].astype(str)),flush=True)
+# display(HTML(buys_safe.to_html(index=False)))
 ret = df_to_html_file(buys_safe,"/var/www/html/home/viewable_pages/all_roads_lead_to_up_safe.php","All Roads Lead to UP & Safe") 
+save_list_to_file(sublist,os.getcwd()+'/picked_stocks','all_up_and_safe.csv')
 
 # START AN EMAIL
 email_body =  " Run is Done! \n"+buys_safe.to_string()
@@ -1084,9 +1138,9 @@ ret = df_to_html_file(hi_sharpe_df,"/var/www/html/home/viewable_pages/high_sharp
 
 # %%
 LR_Next_Day_Recomm_only = eval_df[eval_df['LR_Next_Day_Recomm']=='Buy,Buy,Buy'].sort_values('Daily_VaR',ascending=False)
-print(f"{len(LR_Next_Day_Recomm_only)} Stocks:",flush=True)
-print(','.join(LR_Next_Day_Recomm_only['Stock'].astype(str)),flush=True)
-display(HTML(LR_Next_Day_Recomm_only.to_html(index=False)))
+# print(f"{len(LR_Next_Day_Recomm_only)} Stocks:",flush=True)
+# print(','.join(LR_Next_Day_Recomm_only['Stock'].astype(str)),flush=True)
+# display(HTML(LR_Next_Day_Recomm_only.to_html(index=False)))
 ret = df_to_html_file(LR_Next_Day_Recomm_only,"/var/www/html/home/viewable_pages/up_next_day.php","Linear Reg. Predicted Up_Next_Day_only") 
 
 # %% [markdown]
@@ -1098,9 +1152,9 @@ LR_Next_Day_Sell_only = eval_df[(eval_df['LR_Next_Day_Recomm']=='Sell,Buy,Buy') 
                                 (eval_df['LR_Next_Day_Recomm']=='Sell,Buy,Sell') | 
                                 (eval_df['LR_Next_Day_Recomm']=='Buy,Sell,Sell')]
 
-print(f"{len(LR_Next_Day_Sell_only)} Stocks:",flush=True)
-print(','.join(LR_Next_Day_Sell_only['Stock'].astype(str)),flush=True)
-display(HTML(LR_Next_Day_Sell_only.to_html(index=False)))
+# print(f"{len(LR_Next_Day_Sell_only)} Stocks:",flush=True)
+# print(','.join(LR_Next_Day_Sell_only['Stock'].astype(str)),flush=True)
+# display(HTML(LR_Next_Day_Sell_only.to_html(index=False)))
 ret = df_to_html_file(LR_Next_Day_Sell_only,"/var/www/html/home/viewable_pages/down_next_day.php","Linear Reg. Predicted Down_Next_Day_only") 
 
 # %% [markdown]
@@ -1108,8 +1162,8 @@ ret = df_to_html_file(LR_Next_Day_Sell_only,"/var/www/html/home/viewable_pages/d
 
 # %%
 up_Supertrend = eval_df[(eval_df['Supertrend_Result'] == 'Buy') & (eval_df['Supertrend_Winner'] == True)].sort_values('ST_Signal_Date', ascending=False).sort_values(by='SMA_X_Date', ascending=False)
-print(f"{len(up_Supertrend)} Stocks:",flush=True)
-display(HTML(up_Supertrend.to_html(index=False)))
+# print(f"{len(up_Supertrend)} Stocks:",flush=True)
+# display(HTML(up_Supertrend.to_html(index=False)))
 ret = df_to_html_file(up_Supertrend,"/var/www/html/home/viewable_pages/up_supertrend.php","Supertrend Winners and Still Supertrending") 
 
 # %% [markdown]
@@ -1117,8 +1171,8 @@ ret = df_to_html_file(up_Supertrend,"/var/www/html/home/viewable_pages/up_supert
 
 # %%
 up_Supertrend = eval_df[eval_df['Supertrend_Result'] == 'Buy'].sort_values('ST_Signal_Date', ascending=False).sort_values(by='SMA_X_Date', ascending=False)
-print(f"{len(up_Supertrend)} Stocks:",flush=True)
-display(HTML(up_Supertrend.to_html(index=False)))
+# print(f"{len(up_Supertrend)} Stocks:",flush=True)
+# display(HTML(up_Supertrend.to_html(index=False)))
 ret = df_to_html_file(up_Supertrend,"/var/www/html/home/viewable_pages/up_supertrend_not_winners.php","Supertrending (Winners  or Not)") 
 
 
@@ -1127,8 +1181,8 @@ ret = df_to_html_file(up_Supertrend,"/var/www/html/home/viewable_pages/up_supert
 
 # %%
 Crossed_up = eval_df[eval_df['SMA_Crossed_Up'] == 'Buy'].sort_values('SMA_X_Date', ascending=False)
-print(f"{len(Crossed_up)} Stocks",flush=True)
-display(HTML(Crossed_up.to_html(index=False)))
+# print(f"{len(Crossed_up)} Stocks",flush=True)
+# display(HTML(Crossed_up.to_html(index=False)))
 ret = df_to_html_file(Crossed_up,"/var/www/html/home/viewable_pages/crossed_up.php","Fast SMA Crossed Slow SMA") 
 
 # %% [markdown]
@@ -1137,11 +1191,11 @@ ret = df_to_html_file(Crossed_up,"/var/www/html/home/viewable_pages/crossed_up.p
 # %%
 Crossed_up = eval_df[(eval_df['SMA_Crossed_Up'] == 'Buy') & (eval_df['Supertrend_Result'] == 'Buy') & (eval_df['Supertrend_Winner'] == True) ].sort_values('SMA_X_Date', ascending=False)
 sublist2 = ','.join(Crossed_up['Stock'].astype(str))
-print(sublist2,flush=True)
+# print(sublist2,flush=True)
 save_list_to_file(sublist2,'picked_stocks','SMAX_Supertrend_Winner.csv')
-print(f"{len(Crossed_up)} Stocks:",flush=True)
+# print(f"{len(Crossed_up)} Stocks:",flush=True)
 # display(Crossed_up.hide_index())
-display(HTML(Crossed_up.to_html(index=False)))
+# display(HTML(Crossed_up.to_html(index=False)))
 ret = df_to_html_file(Crossed_up,"/var/www/html/home/viewable_pages/crossed_up_supertrend.php","SMA Crossed and in Supertrend & Winner") 
 
 # %% [markdown]
