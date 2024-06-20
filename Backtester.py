@@ -5,7 +5,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')  # Use the 'Agg' backend for non-GUI environments
+# matplotlib.use('Agg')  # Use the 'Agg' backend for non-GUI environments
 import matplotlib.pyplot as plt
 
 from datetime import datetime
@@ -263,6 +263,7 @@ class SignalsBacktester:
 
     def plot_account(self,stock=None):
         buyhold_account = pd.DataFrame(index=self.df_in.index,columns=["BuyHoldValue"])
+        print(buyhold_account)
         buyhold_account = self.DatesRange(buyhold_account)
         
         close_changes = self.df_in.Close.pct_change().copy()
@@ -305,7 +306,7 @@ class SignalsBacktester:
         
         # print(trans_hist.Buy_Hold)
         
-        plt.figure(figsize=(15, 8))
+        plt.figure(figsize=(12, 6))
         plt.grid(True, which='both', linestyle='--', linewidth=0.5, color='gray')
         if stock:
             plt.title(f"{stock} AI vs Buy&Hold", fontsize=14, fontweight='bold')
@@ -320,7 +321,7 @@ class SignalsBacktester:
         idx= trans_hist.index[1]
         plt.text(idx, trans_hist.loc[idx, 'Buy_Hold'], 
                         f'${self.df_in.loc[idx, "Open"]:.2f}\n{idx.strftime("%Y-%m-%d")}', 
-                        color='blue', fontsize=10, ha='left', va='bottom')
+                        color='blue', fontsize=11, ha='left', va='bottom')
 
         idx= trans_hist.index[-1]
         plt.text(idx, trans_hist.loc[idx, 'Buy_Hold'], 
@@ -369,8 +370,8 @@ class SignalsBacktester:
         plt.tight_layout()  # Adjust spacing to prevent overlapping elements (optional)
 
         # Major and minor ticks (optional)
-        plt.locator_params(axis='x', nbins=7)  # Adjust the number of major x-axis ticks
-        plt.locator_params(axis='y', nbins=5)  # Adjust the number of major y-axis ticks
+        # plt.locator_params(axis='x', nbins=7)  # Adjust the number of major x-axis ticks
+        # plt.locator_params(axis='y', nbins=5)  # Adjust the number of major y-axis ticks
         plt.minorticks_on()  # Enable minor ticks on both axes
 
         if not show_image:
@@ -496,7 +497,7 @@ class SignalsBacktester:
         # if there are less than 2 transactions we cannot backtest and we need to quit
         # print(tran_history)
         if(tran_history.shape[0] == 0):
-            return ""
+            return "No Data"
 
         max_account_value = tran_history[(tran_history['Account_Value'] == tran_history['Account_Value'].max())]
         if tran_history['Buy_Count'].sum() > 0:
@@ -509,7 +510,7 @@ class SignalsBacktester:
 
         # If no transactions, exit now else show transaction table
         if buys == 0 :
-            return
+            return "No Data"
         
         output = f'<h2 style="text-decoration: underline;">Results of Backtesting for {stock}</h2><b>'
         output += "<ul>"
@@ -546,7 +547,10 @@ if __name__ == "__main__":
     start_date = '2024-04-08'
     
     # Download the prices
-    df_prices = yf.download(in_stock,start=start_date,interval='1d',progress=False)
+    # df_prices = yf.download(in_stock,start=start_date,interval='1d',progress=False)
+    df_prices = yf.Ticker(in_stock).history(start=start_date,interval='1d',period='max')
+    df_prices.index = pd.to_datetime(df_prices.index).tz_localize(None)
+    
     
     # Create a dictionary with dates as keys and buy signals as values
     dates = df_prices.index

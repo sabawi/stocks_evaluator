@@ -6,6 +6,11 @@ from Backtester import SignalsBacktester as bt
 import yfinance as yf
 import warnings
 from functools import wraps
+import pymysql
+import matplotlib
+# matplotlib.use('TkAgg')  # Use an interactive backend
+# plt.style.use('fivethirtyeight')
+# plt.rcParams['figure.figsize'] = (20,10)
 
 
 transact_record = []
@@ -56,6 +61,21 @@ def make_buys_df(data):
         
     return df
 
+def get_filter_rows():
+    rows = [
+        {'FilterName': 'all_stocks', 'Description': 'All Stocks in Database', 'Comments': 'All the stocks being analyzed and screened in the database'},
+        {'FilterName': 'confirmed_up_tred_buys', 'Description': 'Confirmed UpTrend BUYS', 'Comments': 'Confirmed Momentum Indicators'},
+        {'FilterName': 'confirmed_signal_only', 'Description': 'Confirmed Signal Stocks ONLY', 'Comments': 'Only Confirmed Momentum Indicators'},
+        {'FilterName': 'buybuybuy', 'Description': 'BUYS, BUYS, and more BUYS', 'Comments': 'All indicators are BUY and in supertrend'},
+        {'FilterName': 'buybuybuy_not_st', 'Description': 'BUYS, BUYS, and more BUYS (Not necessarily ST winners)', 'Comments': 'All indicators are BUY but NOT in supertrend'},
+        {'FilterName': 'all_up_safe', 'Description': 'All Roads Lead to UP & Safe', 'Comments': 'Restricts the BUY BUY BUY list to low risk stocks only'},
+        {'FilterName': 'smx_st_win', 'Description': 'SMA Crossed and in Supertrend & Winner', 'Comments': 'Fast SMA Crossed up the Slow SMA, Supertrending and a Trend Winner'},
+        {'FilterName': 'smx_ema_buys', 'Description': 'SMA Crossed and EMA Trend are Buys', 'Comments': 'Fast SMA Crossed up the Slow SMA, EMA Trend are both Buys'}
+    ]
+    
+    return rows
+
+
 # Example usage
 # data = {}
 # add_data(data, "2024-04-12", ["GOOG", "IBM"])
@@ -88,7 +108,28 @@ def transact(action,date,stock,note):
     # Append the record to the data list
     transact_record.append(record)
     
-def connect_db(db_file):
+
+def connect_db(host='localhost', user='root', password='Down2earth!', database='mystocks'):
+    """Connects to the MySQL database and returns the connection object.
+
+    Args:
+        host (str): The hostname or IP address of the MySQL server.
+        user (str): The username to use when connecting to the database.
+        password (str): The password to use when connecting to the database.
+        database (str): The name of the database to connect to.
+
+    Returns:
+        pymysql.Connection: The connection object to the database.
+    """
+    conn = pymysql.connect(
+        host=host,
+        user=user,
+        password=password,
+        database=database
+    )
+    return conn
+    
+def connect_db_old(db_file):
     """Connects to the database file and returns the connection object.
 
     Args:
@@ -333,7 +374,7 @@ def query_distinct_dates(conn, table_name):
     distinct_dates = [row[0] for row in results]
     return distinct_dates
 
-def get_eval_by_date(conn, datestr):
+def get_eval_by_date_old(conn, datestr):
     """
     Queries the database for rows in the 'stock_data' table where the 'Last Run' 
     column matches the provided date string and returns a pandas DataFrame.
@@ -369,6 +410,42 @@ def get_eval_by_date(conn, datestr):
 
     return df
 
+def get_eval_by_date(conn, datestr):
+    """
+    Queries the database for rows in the 'stock_data' table where the 'Last Run' 
+    column matches the provided date string and returns a pandas DataFrame.
+
+    Args:
+        conn (pymysql.Connection): The connection object to the database.
+        datestr (str): The date string to filter by (format should match 'Last Run' column).
+
+    Returns:
+        pandas.DataFrame: A DataFrame containing the matching rows from the table, 
+                          or an empty DataFrame if no data is found.
+    """
+    cursor = conn.cursor()
+
+    sql_statement = """
+        SELECT * FROM stock_data 
+        WHERE `Last_Run` = %s;
+    """
+
+    cursor.execute(sql_statement, (datestr,))  # Use tuple for parameter substitution
+    results = cursor.fetchall()
+
+    # Check if any results were found
+    if results:
+        # Convert results to a DataFrame using column names from cursor description
+        df = pd.DataFrame(results, columns=[desc[0] for desc in cursor.description])
+    else:
+        # Return an empty DataFrame if no data is found
+        df = pd.DataFrame()
+
+    cursor.close()
+    return df
+
+
+
 def screen_for_buys(eval_df, ignore_supertrend_winners=False):
         if not ignore_supertrend_winners:
                 buys_df = eval_df[ (eval_df['Supertrend_Winner']==True) &  
@@ -386,21 +463,59 @@ def screen_for_buys(eval_df, ignore_supertrend_winners=False):
         
         return buys_df
     
+# def filter_list(datestr, filter_name, conn):
+    
+#     # print(f"in filter_list() datestr = {datestr}")
+#     if not datestr:
+#         datestr = date.today.today.strftime("%Y-%m-%d")
+        
+#     result = get_eval_by_date(conn, datestr)
+#     if result.empty:
+#         print(f"*** NO RESULTS on {datestr}")
+#         return result
+#     # else:
+#     #     print("********* Results found **********")
+        
+#     # print(result)
+#     match filter_name:
+#         case "buybuybuy":
+#             result = screen_for_buys(eval_df=result,ignore_supertrend_winners=False)
+#             result = result.sort_values('Daily_VaR',ascending=False).sort_values('Sharpe_Ratio%',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
+#         case "buybuybuy_not_st":
+#             result = screen_for_buys(eval_df=result,ignore_supertrend_winners=True)
+#             result = result.sort_values('Daily_VaR',ascending=False).sort_values('Sharpe_Ratio%',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
+#         case "all_up_safe":
+#             result = screen_for_buys(eval_df=result,ignore_supertrend_winners=False)
+#             result = result.sort_values('Daily_VaR',ascending=False).sort_values('Sharpe_Ratio%',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
+#             result = result[(result['Beta']>0.8) & (result['Beta']<2) ].sort_values(by='SMA_X_Date', ascending=False).sort_values('Daily_VaR',ascending=False)
+#         case "smx_st_win":
+#             result = result[(result['SMA_Crossed_Up'] == 'Buy') & (result['Supertrend_Result'] == 'Buy') & (result['Supertrend_Winner'] == True) ].sort_values('SMA_X_Date', ascending=False)
+#         case _:
+#             print(f"No such pre-programmed filter '{filter_name}'")
+            
+            
+#     return result
+
+
 def filter_list(datestr, filter_name, conn):
     
-    # print(f"in filter_list() datestr = {datestr}")
     if not datestr:
         datestr = date.today.today.strftime("%Y-%m-%d")
         
     result = get_eval_by_date(conn, datestr)
     if result.empty:
-        print(f"*** NO RESULTS on {datestr}")
+        result = f"*** NO RESULTS on {datestr}"
         return result
-    # else:
-    #     print("********* Results found **********")
         
-    # print(result)
     match filter_name:
+        case "all_stocks":
+            result = result.sort_values('Stock',ascending=True)
+        case "confirmed_up_tred_buys":
+            result = screen_for_buys(eval_df=result,ignore_supertrend_winners=False)
+            result = result[(result['SMA_Crossed_Up'] == 'Buy') & (result['EMA_Trend'] == 'Buy') & (result['Confirmation'] == 'Buy') ].sort_values('Mom_Days_Confirmed', ascending=True)
+            result = result[(result['Beta']>0.8) & (result['Beta']<2) ]
+        case "confirmed_signal_only":
+            result = result[ (result['Confirmation'] == 'Buy') ].sort_values(by=['Mom_Days_Confirmed'], ascending=[True])
         case "buybuybuy":
             result = screen_for_buys(eval_df=result,ignore_supertrend_winners=False)
             result = result.sort_values('Daily_VaR',ascending=False).sort_values('Sharpe_Ratio%',ascending=True).sort_values(by='SMA_X_Date', ascending=False)
@@ -413,11 +528,14 @@ def filter_list(datestr, filter_name, conn):
             result = result[(result['Beta']>0.8) & (result['Beta']<2) ].sort_values(by='SMA_X_Date', ascending=False).sort_values('Daily_VaR',ascending=False)
         case "smx_st_win":
             result = result[(result['SMA_Crossed_Up'] == 'Buy') & (result['Supertrend_Result'] == 'Buy') & (result['Supertrend_Winner'] == True) ].sort_values('SMA_X_Date', ascending=False)
+        case "smx_ema_buys":
+            result = result[(result['SMA_Crossed_Up'] == 'Buy') & (result['EMA_Trend'] == 'Buy') ].sort_values('EMA_Days_at_Buy', ascending=True)
         case _:
-            print(f"No such pre-programmed filter '{filter_name}'")
+            result = f"No such pre-programmed filter '{filter_name}'"
             
             
     return result
+
 
 def get_user_inputs():
     """
@@ -449,29 +567,32 @@ def get_user_inputs():
 
 def report_buy_sell_backtest(inDate, recommendation_filter, stock, is_plot):
     db_file = "data.db"  # Replace with your actual database filename
-    conn = connect_db(db_file)
+    # conn = connect_db(db_file)
+    conn = connect_db()
     output = "<div id='backtesting_results'>"
     data = {}
     invest_amount =10000 # Initial investment in $$
     
     # Define column names and data types
-    filter_columns = ['FilterName', 'Description', 'Comments']
-    fdata_types = {'FilterName': str, 'Description': str, 'Comments': str}
+    # filter_columns = ['FilterName', 'Description', 'Comments']
+    # fdata_types = {'FilterName': str, 'Description': str, 'Comments': str}
     
     
-    # Create an empty DataFrame with specified structure
-    filters_df = pd.DataFrame(columns=filter_columns, dtype=str)    
+    # # Create an empty DataFrame with specified structure
+    # filters_df = pd.DataFrame(columns=filter_columns, dtype=str)    
     
     # Define a list of dictionaries, where each dictionary represents a row
-    rows = [
-        {'FilterName': 'buybuybuy', 'Description': 'BUYS, BUYS, and more BUYS', 'Comments': 'All indicators are BUY and in supertrend'},
-        {'FilterName': 'buybuybuy_not_st', 'Description': 'BUYS, BUYS, and more BUYS (Not necessarily ST winners)', 'Comments': 'All indicators are BUY but NOT in supertrend'},
-        {'FilterName': 'all_up_safe', 'Description': 'All Roads Lead to UP & Safe', 'Comments': 'Restricts the BUY BUY BUY list to low risk stocks only'},
-        {'FilterName': 'smx_st_win', 'Description': 'SMA Crossed and in Supertrend & Winner', 'Comments': 'Fast SMA Crossed up the Slow SMA, Supertrending and a Trend Winner'}
-    ]
+    # rows = [
+    #     {'FilterName': 'buybuybuy', 'Description': 'BUYS, BUYS, and more BUYS', 'Comments': 'All indicators are BUY and in supertrend'},
+    #     {'FilterName': 'buybuybuy_not_st', 'Description': 'BUYS, BUYS, and more BUYS (Not necessarily ST winners)', 'Comments': 'All indicators are BUY but NOT in supertrend'},
+    #     {'FilterName': 'all_up_safe', 'Description': 'All Roads Lead to UP & Safe', 'Comments': 'Restricts the BUY BUY BUY list to low risk stocks only'},
+    #     {'FilterName': 'smx_st_win', 'Description': 'SMA Crossed and in Supertrend & Winner', 'Comments': 'Fast SMA Crossed up the Slow SMA, Supertrending and a Trend Winner'}
+    # ]
 
+    rows = get_filter_rows()
+    
     # Efficiently populate the DataFrame using list comprehension and pd.DataFrame
-    filters_df = pd.DataFrame([row for row in rows], columns=filter_columns)
+    filters_df = pd.DataFrame([row for row in rows])
 
     # print(f"{recommendation_filter} \n {filters_df['FilterName']}")
     if recommendation_filter in set(filters_df['FilterName']):
@@ -491,10 +612,10 @@ def report_buy_sell_backtest(inDate, recommendation_filter, stock, is_plot):
         output += ("Filter NOT found<br>")
     
     sql_statement = f"""
-        select "Last_Run", "Stock" , "Last_Price" 
+        select Last_Run, Stock , Last_Price 
         from stock_data 
-        where "Last_Run" >= {inDate}
-        ORDER BY "Last_Run";
+        where Last_Run >= {inDate}
+        ORDER BY Last_Run;
         """
     cursor = query_data(conn, sql_statement)
     process_data(cursor,conn=conn,filter_name=recommendation_filter)
@@ -525,7 +646,9 @@ def report_buy_sell_backtest(inDate, recommendation_filter, stock, is_plot):
     # start_date = buy_alerts.index[0]
     start_date = inDate 
     # print(f"Alert start Date {start_date}")
-    df_prices = yf.download(stock,start=start_date,interval='1d',progress=False)
+    # df_prices = yf.download(stock,start=start_date,interval='1d',period='max',progress=False)
+    df_prices = yf.Ticker(stock).history(start=start_date,interval='1d',period='max')
+    df_prices.index = pd.to_datetime(df_prices.index).tz_localize(None)
     
     # Create a Series with 0s (assuming all dates initially don't have the stock)
     buy_alerts = pd.Series(0, index=df_prices.index)
@@ -609,9 +732,9 @@ def plot_account_image_route(inDate, recommendation_filter, stock):
         
     
     sql_statement = """
-        select "Last_Run", "Stock" , "Last_Price" 
+        select Last_Run, Stock , Last_Price 
         from stock_data 
-        ORDER BY "Last_Run";
+        ORDER BY Last_Run;
         """
     cursor = query_data(conn, sql_statement)
     process_data(cursor,conn=conn,filter_name=recommendation_filter)
@@ -643,7 +766,9 @@ def plot_account_image_route(inDate, recommendation_filter, stock):
     # start_date = buy_alerts.index[0]
     start_date = inDate 
     # print(f"Alert start Date {start_date}")
-    df_prices = yf.download(stock,start=start_date,interval='1d',progress=False)
+    # df_prices = yf.download(stock,start=start_date,interval='1d',period='max',progress=False)
+    df_prices = yf.Ticker(stock).history(start=start_date,interval='1d',period='max')
+    
     # print(df_prices)
     
     for i, row in buy_stocks_df.iterrows():
@@ -671,10 +796,23 @@ def plot_account_image_route(inDate, recommendation_filter, stock):
     
     return plot_image
     
+def get_filters_df():
+    rows = get_filter_rows()
+
+    # Define column names and data types
+    filter_columns = ['FilterName', 'Description', 'Comments']
+    fdata_types = {'FilterName': str, 'Description': str, 'Comments': str}
+
+    # Efficiently populate the DataFrame using list comprehension and pd.DataFrame
+    filters_df = pd.DataFrame([row for row in rows], columns=filter_columns)
+    
+    return filters_df
+    
 def main():
     """Main function to connect, query, and process data"""
     db_file = "data.db"  # Replace with your actual database filename
-    conn = connect_db(db_file)
+    # conn = connect_db(db_file)
+    conn = connect_db()
 
     data = {}
 
@@ -687,13 +825,15 @@ def main():
     filters_df = pd.DataFrame(columns=filter_columns, dtype=str)    
     
     # Define a list of dictionaries, where each dictionary represents a row
-    rows = [
-        {'FilterName': 'buybuybuy', 'Description': 'BUYS, BUYS, and more BUYS', 'Comments': 'All indicators are BUY and in supertrend'},
-        {'FilterName': 'buybuybuy_not_st', 'Description': 'BUYS, BUYS, and more BUYS (Not necessarily ST winners)', 'Comments': 'All indicators are BUY but NOT in supertrend'},
-        {'FilterName': 'all_up_safe', 'Description': 'All Roads Lead to UP & Safe', 'Comments': 'Restricts the BUY BUY BUY list to low risk stocks only'},
-        {'FilterName': 'smx_st_win', 'Description': 'SMA Crossed and in Supertrend & Winner', 'Comments': 'Fast SMA Crossed up the Slow SMA, Supertrending and a Trend Winner'}
-    ]
+    # rows = [
+    #     {'FilterName': 'buybuybuy', 'Description': 'BUYS, BUYS, and more BUYS', 'Comments': 'All indicators are BUY and in supertrend'},
+    #     {'FilterName': 'buybuybuy_not_st', 'Description': 'BUYS, BUYS, and more BUYS (Not necessarily ST winners)', 'Comments': 'All indicators are BUY but NOT in supertrend'},
+    #     {'FilterName': 'all_up_safe', 'Description': 'All Roads Lead to UP & Safe', 'Comments': 'Restricts the BUY BUY BUY list to low risk stocks only'},
+    #     {'FilterName': 'smx_st_win', 'Description': 'SMA Crossed and in Supertrend & Winner', 'Comments': 'Fast SMA Crossed up the Slow SMA, Supertrending and a Trend Winner'}
+    # ]
 
+    rows = get_filter_rows()
+    
     # Efficiently populate the DataFrame using list comprehension and pd.DataFrame
     filters_df = pd.DataFrame([row for row in rows], columns=filter_columns)
 
@@ -718,9 +858,9 @@ def main():
         print("Filter NOT found")
     
     sql_statement = """
-        select "Last_Run", "Stock" , "Last_Price" 
+        select Last_Run, Stock , Last_Price 
         from stock_data 
-        ORDER BY "Last_Run";
+        ORDER BY Last_Run;
         """
     cursor = query_data(conn, sql_statement)
     process_data(cursor,conn=conn,filter_name=filter_name)
@@ -766,7 +906,9 @@ def main():
     # start_date = buy_alerts.index[0]
     start_date = test_datestr 
     # print(f"Alert start Date {start_date}")
-    df_prices = yf.download(in_stock,start=start_date,interval='1d',progress=False)
+    # df_prices = yf.download(in_stock,start=start_date,interval='1d',period='max',progress=False)
+    df_prices = yf.Ticker(in_stock).history(start=start_date,interval='1d',period='max')
+    
     
     for i, row in buy_stocks_df.iterrows():
         # print(i,row["Stock"])
@@ -787,7 +929,7 @@ def main():
     tran_history = backtest.get_tran_history()
     # print(tran_history)
     backtest.results()
-    backtest.plot_account(f"{in_stock} Backtest since {start_date}")
+    backtest.plot_account_image(f"{in_stock} Backtest since {start_date}",show_image=True)
 
     # buy_alerts = buy_alerts.shift(1).fillna(0)
     # print(buy_alerts)

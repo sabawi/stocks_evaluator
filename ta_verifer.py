@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 import io
 import ema_indicator_lib as ema_lib
 
+# plt.style.use('fivethirtyeight')
+# plt.rcParams['figure.figsize'] = (20,10)
+
 def calculate_talib_alphatrend(df):
     """
     Parameters to Adjust
@@ -181,6 +184,7 @@ def calculate_pdta_alphatrend(stock,df,Fast_EMA,Slow_EMA, Lookback):
     # Add the Alpha Trend indicator to the DataFrame
     df = pd.concat([df, alpha_trend], axis=1)
 
+    # print("df size = ",len(df),df.head(10))
     df['Buy_Sell_Signal'] = 0
     
     try:
@@ -265,9 +269,9 @@ def get_momentum_indicators(df):
 
 def plot_ta_alphatrend(df,stock,image_only = False,fast_ema=20,slow_ema=40):
     # in : df should contain 'Close' price column and a 'Buy_Sell_Signal' column and indexed by Date
-    
+    # print("IN plot_ta_alphatrend(df,stock,image_only = False,fast_ema=20,slow_ema=40)")
     # Plotting the stock price and AMAT indicator
-    plt.figure(figsize=(14,7))
+    plt.figure(figsize=(12,6))
     plt.grid(True, which='both', linestyle='--', linewidth=0.5, color='gray')
 
     # Add labels for x and y axes
@@ -282,7 +286,7 @@ def plot_ta_alphatrend(df,stock,image_only = False,fast_ema=20,slow_ema=40):
     
     plt.text(idx, df.loc[idx, 'Close'], 
             f'${df.loc[idx, "Close"]:.2f}\n{idx.strftime("%Y-%m-%d")}', 
-            color='blue', fontsize=10, ha='left', va='bottom')
+            color='blue', fontsize=11, ha='left', va='bottom')
     
     ##### PLOT BUY as Green and SELL as Red ######
     # Initialize variables to track segments
@@ -292,12 +296,17 @@ def plot_ta_alphatrend(df,stock,image_only = False,fast_ema=20,slow_ema=40):
     # Iterate through the DataFrame to plot segments
     for i in range(1, len(df)):
         current_signal = df['Confirmation'].iloc[i]
-        
+   
         # Check if the signal changes
         if current_signal != prev_signal:
             # Plot the segment
             plt.plot(df.index[segment_start:i+1], df['Close'].iloc[segment_start:i+1],
                     color='green' if prev_signal == 1 else 'red')
+            
+            # Plot vertical lines for change in signals
+            date_to_mark = pd.Timestamp(df.index[segment_start])
+            plt.axvline(x=date_to_mark, color='green' if prev_signal == 1 else 'red', linestyle='--',linewidth=1.3, label=df.index[segment_start].strftime('%Y-%m-%d'))
+            
             # Update segment start
             segment_start = i
         
@@ -307,6 +316,10 @@ def plot_ta_alphatrend(df,stock,image_only = False,fast_ema=20,slow_ema=40):
     # Plot the last segment
     plt.plot(df.index[segment_start:], df['Close'].iloc[segment_start:], 
             color='green' if df['Confirmation'].iloc[segment_start] == 1 else 'red')
+    
+    # Plot vertical lines for change in signals
+    date_to_mark = pd.Timestamp(df.index[segment_start])
+    plt.axvline(x=date_to_mark, color='green' if df['Confirmation'].iloc[segment_start] == 1 else 'red', linestyle='--', linewidth=1.3, label=df.index[segment_start].strftime('%Y-%m-%d'))
 
     # Adding the legend
     # To avoid duplicate legend entries, we plot a single invisible point with each label
@@ -337,16 +350,17 @@ def plot_ta_alphatrend(df,stock,image_only = False,fast_ema=20,slow_ema=40):
     handles, labels = plt.gca().get_legend_handles_labels()
     legend = plt.legend(handles=handles, labels=labels, title=f'EMA Trend {stock}:', loc='upper left', bbox_to_anchor=(1, 1))
 
-    plt.title(f'{stock} EMA Trend Indicator',fontsize = 14, fontweight ='bold')
+    plt.title(f'{stock} Confirmed Signals',fontsize = 14, fontweight ='bold')
 
     # Customize axes (optional)
     plt.xticks(rotation=45)  # Rotate x-axis tick labels for better readability (optional)
-    plt.tight_layout()  # Adjust spacing to prevent overlapping elements (optional)
 
     # Major and minor ticks (optional)
-    plt.locator_params(axis='x', nbins=7)  # Adjust the number of major x-axis ticks
-    plt.locator_params(axis='y', nbins=5)  # Adjust the number of major y-axis ticks
+    # plt.locator_params(axis='x', nbins=7)  # Adjust the number of major x-axis ticks
+    # plt.locator_params(axis='y', nbins=5)  # Adjust the number of major y-axis ticks
     plt.minorticks_on()  # Enable minor ticks on both axes
+
+    plt.tight_layout()  # Adjust spacing to prevent overlapping elements (optional)
 
 
     # Adding labels and legend
@@ -355,28 +369,34 @@ def plot_ta_alphatrend(df,stock,image_only = False,fast_ema=20,slow_ema=40):
     # plt.legend()
     
     if image_only:
-            # Save the plot to a BytesIO object
-            img = io.BytesIO()
-            plt.savefig(img, format='png')
-            img.seek(0)
-            plt.close()
-            print("EMA Plot Image Generated",flush=True)
-    
-            return img    
+        print("in plot_ta_alphatrend() returning image to webpage")
+        # Save the plot to a BytesIO object
+        img = io.BytesIO()
+        plt.savefig(img, format='png')
+        img.seek(0)
+        plt.close()
+        print("EMA Plot Image Generated",flush=True)
+        return img    
     else:
         plt.show()    
     
 def generate_pdta_plot_image(stock,start_date,fast,slow,lookback):
+    
     # Create a DataFrame with sample data
-    df = yf.download(stock,start=start_date,period='1d',progress=False)
+    print(start_date)
+    df1 = yf.Ticker(stock).history(start=start_date,end=None,interval='1d')
+    # print(df1)
+    # print(f"len(df1 )= {len(df1)}")
+    if (len(df1) == 0): print("************** NO DATA ******") 
+    # else: print("START DATE =", start_date, " --- \ndf = ",df1)
     
     # Calculate Pandas alpha trend using pandas_ta lib
-    last_date,recommendation, df_trend_pdta, ema_days_at_buy = calculate_pdta_alphatrend(stock=stock,df=df,Fast_EMA=fast,Slow_EMA=slow,Lookback=lookback)
+    last_date,recommendation, df_trend_pdta, ema_days_at_buy = calculate_pdta_alphatrend(stock=stock,df=df1,Fast_EMA=fast,Slow_EMA=slow,Lookback=lookback)
     
     df_trend_pdta = ema_lib.generate_signals(df_trend_pdta,fast_ema=fast,slow_ema=slow)
     
     # print(f"{stock} Alpha Trend Indicator:",df_trend_pdta.loc[df_trend_pdta.index,'Buy_Sell_Signal'].tail(20))
-    print(f"{stock} Alpha Trend Indicator:",df_trend_pdta.tail(20))
+    # print(f"{stock} Alpha Trend Indicator:",df_trend_pdta.tail(20))
 
     # img = plot_ta_alphatrend(df_trend_pdta,stock,image_only=True)
 
@@ -403,13 +423,27 @@ def main():
     Lookback = int(input("  Lookback Period :"))
 
     # Create a DataFrame with sample data
-    df = yf.download(stock,start=start_date,period='1d')
+    df = yf.Ticker(stock).history(start=start_date,period='max',interval='1d')
     
     # Calculate Pandas alpha trend using pandas_ta lib
     last_date,recommendation, df_trend_pdta, ema_days_at_buy = calculate_pdta_alphatrend(stock=stock,df=df,Fast_EMA=Fast_EMA,Slow_EMA=Slow_EMA,Lookback=Lookback)
     print(df_trend_pdta['Buy_Sell_Signal'])
     print(df_trend_pdta)
+    df_trend_pdta = ema_lib.generate_signals(df_trend_pdta,fast_ema=Fast_EMA,slow_ema=Slow_EMA)
     
+    # print(f"{stock} Alpha Trend Indicator:",df_trend_pdta.loc[df_trend_pdta.index,'Buy_Sell_Signal'].tail(20))
+    # print(f"{stock} Alpha Trend Indicator:",df_trend_pdta.tail(20))
+
+    # img = plot_ta_alphatrend(df_trend_pdta,stock,image_only=True)
+
+    df_trend_pdta = get_momentum_indicators(df_trend_pdta)
+    
+    df_trend_pdta['Confirmation'] = 0
+    
+    for idx, row in df_trend_pdta.iterrows():
+        if df_trend_pdta.loc[idx,'Buy_Sell_Signal'] == 1 & df_trend_pdta.loc[idx,'Mom_Signal'] == 1:
+            df_trend_pdta.loc[idx,'Confirmation'] = 1
+            
     
     # print(f"Last Date : {last_date}\nLast recommendation : {recommendation.strip().upper()}")
     # Plot alpha_trend
