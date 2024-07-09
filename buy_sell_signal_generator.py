@@ -65,6 +65,7 @@ def get_filter_rows():
     rows = [
         {'FilterName': 'all_stocks', 'Description': 'All Stocks in Database', 'Comments': 'All the stocks being analyzed and screened in the database'},
         {'FilterName': 'confirmed_up_tred_buys', 'Description': 'Confirmed UpTrend BUYS', 'Comments': 'Confirmed Momentum Indicators'},
+        {'FilterName': 'confirmed_up_trend_buys_NoST', 'Description': 'Confirmed UpTrend BUYS No Supertrend', 'Comments': 'Confirmed Momentum Indicators No Suoertrend'},
         {'FilterName': 'confirmed_signal_only', 'Description': 'Confirmed Signal Stocks ONLY', 'Comments': 'Only Confirmed Momentum Indicators'},
         {'FilterName': 'buybuybuy', 'Description': 'BUYS, BUYS, and more BUYS', 'Comments': 'All indicators are BUY and in supertrend'},
         {'FilterName': 'buybuybuy_not_st', 'Description': 'BUYS, BUYS, and more BUYS (Not necessarily ST winners)', 'Comments': 'All indicators are BUY but NOT in supertrend'},
@@ -457,7 +458,7 @@ def screen_for_buys(eval_df, ignore_supertrend_winners=False):
         else:
                 buys_df = eval_df[ (eval_df['Supertrend_Result']=='Buy') & 
                         (eval_df['LR_Next_Day_Recomm'] == 'Buy,Buy,Buy') &
-                        (eval_df['SMA_Crossed_Up']=='Buy')].sort_values(by=['Supertrend Winner','Supertrend_Result',
+                        (eval_df['SMA_Crossed_Up']=='Buy')].sort_values(by=['Supertrend_Winner','Supertrend_Result',
                                                                             'ST_Signal_Date','SMA_Crossed_Up','SMA_X_Date'],
                                                                         ascending=[False,True,False,True,False])            
         
@@ -514,6 +515,10 @@ def filter_list(datestr, filter_name, conn):
             result = screen_for_buys(eval_df=result,ignore_supertrend_winners=False)
             result = result[(result['SMA_Crossed_Up'] == 'Buy') & (result['EMA_Trend'] == 'Buy') & (result['Confirmation'] == 'Buy') ].sort_values('Mom_Days_Confirmed', ascending=True)
             result = result[(result['Beta']>0.8) & (result['Beta']<2) ]
+        case "confirmed_up_trend_buys_NoST":
+            result = screen_for_buys(eval_df=result, ignore_supertrend_winners=True)
+            result = result[(result['SMA_Crossed_Up'] == 'Buy') & (result['EMA_Trend'] == 'Buy') & (result['Confirmation'] == 'Buy') ].sort_values('Mom_Days_Confirmed', ascending=True)
+            # result = result[(result['Beta']>0.8) & (result['Beta']<2) ]            
         case "confirmed_signal_only":
             result = result[ (result['Confirmation'] == 'Buy') ].sort_values(by=['Mom_Days_Confirmed'], ascending=[True])
         case "buybuybuy":
@@ -639,6 +644,7 @@ def report_buy_sell_backtest(inDate, recommendation_filter, stock, is_plot):
     items = [(date, list(symbols)) for date, symbols in data.items()]
     buy_stocks_df = pd.DataFrame(items,columns=['Date','Stock'])
     buy_stocks_df = buy_stocks_df.set_index('Date')
+    # print(buy_stocks_df)
 
     # Create a Series with 0s (assuming all dates initially don't have the stock)
     # buy_alerts = pd.Series(0, index=buy_stocks_df.index)

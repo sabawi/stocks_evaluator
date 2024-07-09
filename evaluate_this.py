@@ -666,11 +666,11 @@ def recommendation_table(eval_df,stock_list, lookback_years=1, sma_fast=40, sma_
     start_date = first_date_N_years_ago(lookback_years)
     today = datetime.datetime.today().strftime("%Y-%m-%d")
     if run_update_models :
-        print("Updating Models ...",end='',flush=True)
+        print(f"Updating Models (Lookback Period = {lookback_years} Years, Start Date = {start_date}) ...",end='',flush=True)
         stock_best_model_df = update_models(stock_list=stock_list)
         print("Done!",flush=True)
 
-    print('Performing Analysis and Recommendations ...',end='',flush=True)
+    print(f'Performing Analysis and Recommendations (Lookback Period = {lookback_years} Years, Start Date = {start_date}) ...',end='',flush=True)
 
     for s in stock_list:
         winner,buysell,buysell_date,close_price,stock_data, days_at_ST = run_supertrend(s,start_date)
@@ -918,7 +918,9 @@ symbols_file = os.path.dirname(__file__)+'/stocks_list5.txt' ## Inclusive of NAS
 # symbols_file = os.path.dirname(__file__)+'/sectors_etfs.txt'
 stocks_list = read_stocklist(symbols_file)  
 
-eval_df = eval_list_from_file(filename=symbols_file,lookback_years=2,sma_fast=50,sma_slow=100, 
+lookback_years = 2
+
+eval_df = eval_list_from_file(filename=symbols_file,lookback_years=lookback_years,sma_fast=50,sma_slow=100, 
                               ema_trend_fast=20, ema_trend_slow=40, ema_trend_lookback=7,regenerate_models=regenerate_models)
 # eval_df_from_file = eval_df
 # eval_df = eval_all_sp500(lookback_years=2,sma_fast=50,sma_slow=200, regenerate_models=regenerate_models)
@@ -939,7 +941,7 @@ ret = df_to_html_file(eval_df,"/var/www/html/home/viewable_pages/stock_evaluatio
 # ### Exit Strategy
 
 # %%
-lookback_years = 2
+# lookback_years = 2
 # my_stock_list = ['amd','jbl','aapl','nvda','msft','googl','amzn','nflx','meta','adbe','cdns','de','avgo','orcl']
 my_stock_list = stocks_list
 multiple_of_std_dev = 1.5 # Stop Loss as percentage of Std.Dev.
