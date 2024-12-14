@@ -261,7 +261,13 @@ def create_model(stock):
 
 
     # Make predictions for next 5 days
-    first_value = df_in.at[df_in.index[0], 'Close']
+    # print(df_in.columns, flush=True)
+    # print(df_in,flush=True)
+    if df_in.empty:
+        raise ValueError("DataFrame is empty.")
+
+    # first_value = df_in.at[df_in.index[0], 'Close']
+    first_value = df_in.at[df_in.index[0], ('Close', stock)]
     df_pred = df_in.copy()
     # print(first_value)
 
@@ -573,51 +579,76 @@ def create_model(stock):
 
         return df.loc[(df.index >= start) & (df.index <= end)].copy()
 
-    def backtest(df_prices, buy_sell_signals, start_date=None, end_date=None,amount=100000):
-        
-        # Join DataFrames and use ffill() for forward fill
+    def backtest(df_prices, buy_sell_signals, start_date=None, end_date=None, amount=100000):
+        # Flatten MultiIndex columns in df_prices if necessary
+        if isinstance(df_prices.columns, pd.MultiIndex):
+            df_prices.columns = ['_'.join(col).strip() for col in df_prices.columns]
+
+        # Convert buy_sell_signals to DataFrame if it's a Series
+        if isinstance(buy_sell_signals, pd.Series):
+            buy_sell_signals = buy_sell_signals.to_frame(name='Predicted')
+
+        # Join the DataFrames and forward fill missing values
         df_bt = df_prices.join(buy_sell_signals, how='outer').ffill()
-        # df_bt = df_prices.join(buy_sell_signals, how='outer').fillna(method='ffill')
-        
+
+        # Filter by date range if specified
         df_bt = DatesRange(df_bt, start=start_date, end=end_date)
-        df_transactions = pd.DataFrame(np.zeros((len(df_bt), 8)),
-                                    columns=['Buy_Count','Buy_Amount','Sell_Count','Sell_Amount',
-                                                'Shares_Count','Running_Balance','Account_Value','ROI_pcnt'],index=df_bt.index)
-        # df_transactions.fillna(method='ffill')
-        # print(df_transactions)
-        
-        df_transactions.iloc[0].Running_Balance = amount
-        for i in range(1,len(df_bt)):
-            df_transactions.iloc[i].Running_Balance = df_transactions.iloc[i-1].Running_Balance
-            df_transactions.iloc[i].Shares_Count = df_transactions.iloc[i-1].Shares_Count
-            
-            # print(i, df_transactions.iloc[i].Running_Balance)
-            if df_bt.iloc[i-1].Predicted == 1.0:
-                shares_to_buy = int(df_transactions.iloc[i].Running_Balance / df_bt.iloc[i].Open)
-                if(shares_to_buy > 0):
-                    cost_of_shares = round(shares_to_buy * df_bt.iloc[i].Open,2)
-                    df_transactions.iloc[i].Buy_Count = int(shares_to_buy)
-                    df_transactions.iloc[i].Buy_Amount = cost_of_shares
-                    df_transactions.iloc[i].Running_Balance = df_transactions.iloc[i].Running_Balance - cost_of_shares
-                    # print(df_transactions.iloc[i+1].Running_Balance)
-                    df_transactions.iloc[i].Shares_Count = int(shares_to_buy + df_transactions.iloc[i].Shares_Count)
-            if df_bt.iloc[i-1].Predicted == 0.0:
-                if df_transactions.iloc[i].Shares_Count > 0:
-                    proceeds_of_sale = round(df_transactions.iloc[i].Shares_Count * df_bt.iloc[i].Open,2)
-                    df_transactions.iloc[i].Sell_Amount = proceeds_of_sale
-                    df_transactions.iloc[i].Running_Balance = df_transactions.iloc[i].Running_Balance + proceeds_of_sale
-                    # print(df_transactions.iloc[i+1].Running_Balance)
-                    df_transactions.iloc[i].Sell_Count = df_transactions.iloc[i].Shares_Count
-                    df_transactions.iloc[i].Shares_Count = 0
-            
-            df_transactions.iloc[i].Account_Value = round(df_transactions.iloc[i].Running_Balance + \
-                                                    (df_transactions.iloc[i].Shares_Count *  df_bt.iloc[i].Close),2)
-            df_transactions.iloc[i].ROI_pcnt = round( ((df_transactions.iloc[i].Account_Value/amount) -1)*100,2)
-            
-        # df_bt = df_bt.join(df_transactions, how='outer').fillna(method='ffill')
+
+        # Initialize transactions DataFrame
+        df_transactions = pd.DataFrame(
+            np.zeros((len(df_bt), 8)),
+            columns=['Buy_Count', 'Buy_Amount', 'Sell_Count', 'Sell_Amount',
+                    'Shares_Count', 'Running_Balance', 'Account_Value', 'ROI_pcnt'],
+            index=df_bt.index
+        )
+
+        # Set initial balance
+        df_transactions.at[df_bt.index[0], 'Running_Balance'] = amount
+
+        # Iterate over DataFrame rows for transaction logic
+        for i in range(1, len(df_bt)):
+            prev_row = df_transactions.iloc[i - 1]
+            price_open = df_bt.iloc[i].get('Open')  # Use .get to avoid KeyError
+            price_close = df_bt.iloc[i].get('Close')  # Use .get to avoid KeyError
+
+            if price_open is None or price_close is None:
+                continue  # Skip if prices are missing
+
+            # Carry forward balances and shares
+            df_transactions.at[df_bt.index[i], 'Running_Balance'] = prev_row.Running_Balance
+            df_transactions.at[df_bt.index[i], 'Shares_Count'] = prev_row.Shares_Count
+
+            # Buying logic
+            if df_bt.iloc[i - 1]['Predicted'] == 1.0:
+                shares_to_buy = int(prev_row.Running_Balance / price_open)
+                if shares_to_buy > 0:
+                    cost_of_shares = round(shares_to_buy * price_open, 2)
+                    df_transactions.at[df_bt.index[i], 'Buy_Count'] = shares_to_buy
+                    df_transactions.at[df_bt.index[i], 'Buy_Amount'] = cost_of_shares
+                    df_transactions.at[df_bt.index[i], 'Running_Balance'] -= cost_of_shares
+                    df_transactions.at[df_bt.index[i], 'Shares_Count'] += shares_to_buy
+
+            # Selling logic
+            elif df_bt.iloc[i - 1]['Predicted'] == 0.0:
+                shares_to_sell = prev_row.Shares_Count
+                if shares_to_sell > 0:
+                    proceeds_of_sale = round(shares_to_sell * price_open, 2)
+                    df_transactions.at[df_bt.index[i], 'Sell_Amount'] = proceeds_of_sale
+                    df_transactions.at[df_bt.index[i], 'Sell_Count'] = shares_to_sell
+                    df_transactions.at[df_bt.index[i], 'Running_Balance'] += proceeds_of_sale
+                    df_transactions.at[df_bt.index[i], 'Shares_Count'] = 0
+
+            # Calculate account value and ROI
+            account_value = round(
+                df_transactions.at[df_bt.index[i], 'Running_Balance'] + 
+                (df_transactions.at[df_bt.index[i], 'Shares_Count'] * price_close), 2
+            )
+            df_transactions.at[df_bt.index[i], 'Account_Value'] = account_value
+            df_transactions.at[df_bt.index[i], 'ROI_pcnt'] = round(((account_value / amount) - 1) * 100, 2)
+
+        # Merge transactions back to main DataFrame
         df_bt = df_bt.join(df_transactions, how='outer')
-        
-        # print(df_buy)
+
         return df_bt
 
     def buy_and_hold_strategy(df_prices,start_date=None, end_date=None, amount=100000):

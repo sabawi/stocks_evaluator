@@ -34,6 +34,18 @@ def suppress_warnings(func):
 
 # In[395]:
 
+def get_historical_data(symbol, start_date):
+    # return yf.download(
+    #     symbol,
+    #     start=start_date,
+    #     end=datetime.now(),
+    #     interval='1d',
+    #     progress=False,
+    # )
+    df = yf.Ticker(symbol).history(interval="1d", start=start_date, end=datetime.now())
+    return df
+
+
 from datetime import datetime, timedelta
 
 def get_time_difference(past_date):
@@ -55,21 +67,12 @@ def get_time_difference(past_date):
     return years, months, weeks, days
 
 
-def get_historical_data(symbol, start_date):
-    return yf.download(
-        symbol,
-        start=start_date,
-        end=datetime.now(),
-        interval='1d',
-        progress=False,
-    )
-
 
 # # SUPERTREND CALCULATION
 
 # In[396]:
 
-
+@suppress_warnings
 def get_supertrend(high, low, close, lookback, multiplier):
     
     # ATR
@@ -163,6 +166,7 @@ def get_supertrend(high, low, close, lookback, multiplier):
 # In[397]:
 
 
+@suppress_warnings
 def implement_st_strategy(prices, st):
     buy_price = []
     sell_price = []

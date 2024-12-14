@@ -369,13 +369,13 @@ def plot_ta_alphatrend(df,stock,image_only = False,fast_ema=20,slow_ema=40):
     # plt.legend()
     
     if image_only:
-        print("in plot_ta_alphatrend() returning image to webpage")
+        # print("in plot_ta_alphatrend() returning image to webpage")
         # Save the plot to a BytesIO object
         img = io.BytesIO()
         plt.savefig(img, format='png')
         img.seek(0)
         plt.close()
-        print("EMA Plot Image Generated",flush=True)
+        # print("EMA Plot Image Generated",flush=True)
         return img    
     else:
         plt.show()    

@@ -64,6 +64,7 @@ def make_buys_df(data):
 def get_filter_rows():
     rows = [
         {'FilterName': 'all_stocks', 'Description': 'All Stocks in Database', 'Comments': 'All the stocks being analyzed and screened in the database'},
+        {'FilterName': 'gpt4o_sorting_recommendations', 'Description': 'Using GPT4o sorting for top picks', 'Comments': 'Based on which criteria fits a 6m to 1yr investment'},
         {'FilterName': 'confirmed_up_tred_buys', 'Description': 'Confirmed UpTrend BUYS', 'Comments': 'Confirmed Momentum Indicators'},
         {'FilterName': 'confirmed_up_trend_buys_NoST', 'Description': 'Confirmed UpTrend BUYS No Supertrend', 'Comments': 'Confirmed Momentum Indicators No Suoertrend'},
         {'FilterName': 'confirmed_signal_only', 'Description': 'Confirmed Signal Stocks ONLY', 'Comments': 'Only Confirmed Momentum Indicators'},
@@ -511,6 +512,10 @@ def filter_list(datestr, filter_name, conn):
     match filter_name:
         case "all_stocks":
             result = result.sort_values('Stock',ascending=True)
+        case "gpt4o_sorting_recommendations":
+            result = result[(result['Mom_Days_Confirmed']>=1) & (result['SMA_Crossed_Up'] == 'Buy')]
+            result = result.sort_values(by=['Sharpe_Ratio%', 'CAPM', 'Momentum', 'Std._Dev.%', 'Supertrend_Result', 'SMA_Crossed_Up', 'EMA_Trend', 'Beta', 'Daily_VaR'], 
+                            ascending=[False, False, False, True, False, False, False, False, True])
         case "confirmed_up_tred_buys":
             result = screen_for_buys(eval_df=result,ignore_supertrend_winners=False)
             result = result[(result['SMA_Crossed_Up'] == 'Buy') & (result['EMA_Trend'] == 'Buy') & (result['Confirmation'] == 'Buy') ].sort_values('Mom_Days_Confirmed', ascending=True)

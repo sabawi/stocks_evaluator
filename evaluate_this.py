@@ -86,7 +86,8 @@ def save_list_to_file(sublist,dir_path='.',list_filename='unamed_list.csv'):
     print("...Done!",flush=True)
 
 
-import mysql.connector as mysqlpy
+# import mysql.connector as mysqlpy
+import pymysql as mysqlpy
 
 def create_database():
     # Connect to the MySQL database
@@ -672,6 +673,7 @@ def recommendation_table(eval_df,stock_list, lookback_years=1, sma_fast=40, sma_
 
     print(f'Performing Analysis and Recommendations (Lookback Period = {lookback_years} Years, Start Date = {start_date}) ...',end='',flush=True)
 
+    risk_free_rate = -1
     for s in stock_list:
         winner,buysell,buysell_date,close_price,stock_data, days_at_ST = run_supertrend(s,start_date)
         if(len(stock_data)<2):
@@ -719,7 +721,7 @@ def recommendation_table(eval_df,stock_list, lookback_years=1, sma_fast=40, sma_
         sma_sig, sma_date, fastXslow = smacross.sma_xing(stock_data,sma_fast,sma_slow)
         ema_fast_slow_str = f"({ema_trend_fast}X{ema_trend_slow})"
         beta, market_data = sbeta.get_beta(stock_data)
-        CAPM, VaR, Sharpe = capm.CAPM_VaR(stock_data=stock_data,market_data=market_data,bond_mat_duration = lookback_years,stock_beta=beta)
+        CAPM, VaR, Sharpe, risk_free_rate = capm.CAPM_VaR(stock_data=stock_data,market_data=market_data,bond_mat_duration = lookback_years,stock_beta=beta, risk_free_rate=risk_free_rate)
         Sharpe = round(Sharpe,2)
         LR_recommend = LR_run.get_recommendation(stock=s,lookback=lookback_years)
         LR_recommend_str = f"{LR_recommend[0]},{LR_recommend[1]},{LR_recommend[2]}"
@@ -910,7 +912,9 @@ fname = f'{results_dir}/Eval_Results_{datetime.datetime.today().strftime("%Y_%m_
 # ### Evaluate Stocks List
 
 # %%
-regenerate_models = False
+
+# Regenrate the models every Friday only
+regenerate_models = True  if datetime.datetime.today().weekday() == 4 else False
 # symbols_file = os.path.dirname(__file__)+'/stocks_portfolio.txt'
 # symbols_file = os.path.dirname(__file__)+'/stocks_list.txt'
 symbols_file = os.path.dirname(__file__)+'/stocks_list5.txt' ## Inclusive of NASDAQ 100
@@ -1131,7 +1135,10 @@ buys_safe.to_csv(os.path.dirname(__file__)+"/top_picks.csv")
 # ### High Sharpe Ratios (Top 15)
 
 # %%
-hi_sharpe_df = eval_df.sort_values(['Sharpe_Ratio%'], ascending=False)
+# hi_sharpe_df = eval_df.sort_values(['Sharpe_Ratio%'], ascending=False)
+hi_sharpe_df = eval_df.sort_values(by=['Sharpe_Ratio%', 'CAPM', 'Momentum', 'Last_Price', 'Std._Dev.%', 'Supertrend_Result', 'SMA_Crossed_Up', 'EMA_Trend', 'Beta', 'Daily_VaR'], 
+                           ascending=[False, False, False, False, True, False, False, False, False, True])
+
 display(HTML(hi_sharpe_df.head(15).to_html(index=False)))
 ret = df_to_html_file(hi_sharpe_df,"/var/www/html/home/viewable_pages/high_sharpe_ratios.php","High Sharpe Ratios:<br>The Sharpe ratio compares the return of an investment with its risk. Generally, the higher the more attractive the risk-adjusted return.") 
 

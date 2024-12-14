@@ -145,7 +145,7 @@ def sharpe_ratio(stock_data, risk_free_rate) -> float:
     return sharpe_ratio
 
 
-def CAPM_VaR(stock_data,market_data, bond_mat_duration,stock_beta):
+def CAPM_VaR(stock_data,market_data, bond_mat_duration,stock_beta,risk_free_rate):
     # print("************************************************************************************")
     # print("********  Capital Asset Pricing Model (CAPM) & Value at Risk (VaR) Analysis ********")
     # print("************************************************************************************\n")
@@ -182,15 +182,16 @@ def CAPM_VaR(stock_data,market_data, bond_mat_duration,stock_beta):
     # print(f"mu_yearly = {mu_yearly*100}")
     sigma = np.std(stock_data['returns'])
 
-    # Define the risk-free rate (use 10-year Treasury bond yield as an example)
-    ustd_url = "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/"
-    this_year = str(pd.Timestamp.now().year)
-    last_five_years = [str(i) for i in range(int(this_year)-5, int(this_year))]
-    ustd_rates = pd.read_csv(ustd_url+this_year+"/all?type=daily_treasury_yield_curve&field_tdr_date_value="+last_five_years[0]+"&page&_format=csv")
+    if risk_free_rate == -1:
+        # Define the risk-free rate (use 10-year Treasury bond yield as an example)
+        ustd_url = "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/"
+        this_year = str(pd.Timestamp.now().year)
+        last_five_years = [str(i) for i in range(int(this_year)-5, int(this_year))]
+        ustd_rates = pd.read_csv(ustd_url+this_year+"/all?type=daily_treasury_yield_curve&field_tdr_date_value="+last_five_years[0]+"&page&_format=csv")
 
-    # print(ustd_rates)
+        # print(ustd_rates)
 
-    risk_free_rate = ustd_rates.iloc[0][bond_maturity]/100
+        risk_free_rate = ustd_rates.iloc[0][bond_maturity]/100
 
     # Calculate expected return using CAPM
     # stock_beta, market_data = calculate_beta(stock_data, market="^GSPC",strPeriod=stock_data_period)
@@ -271,7 +272,7 @@ def CAPM_VaR(stock_data,market_data, bond_mat_duration,stock_beta):
     # Calculate the Sharpe Ratio for the stock
     sharp_ratio = sharpe_ratio(stock_data, risk_free_rate)
     # print(f"\nSharpe Ratio for {stock_symbol} Stock: {round(sharp_ratio,5)*100}%")
-    return round(expected_return*100,2), round(-1 * var_mc_pct*100,2), round(sharp_ratio*100,5)
+    return round(expected_return*100,2), round(-1 * var_mc_pct*100,2), round(sharp_ratio*100,5), risk_free_rate
 
 if __name__ == "__main__":
     import sbeta_lib as sbeta

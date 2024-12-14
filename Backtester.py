@@ -290,7 +290,7 @@ class SignalsBacktester:
         plt.show()
         
     def plot_account_image(self, stock=None, show_image=False):
-        print("in plot_account_image() Hi World",flush=True)
+        # print("in plot_account_image() Hi World",flush=True)
 
         tmp_trans_hist = self.get_tran_history()
         if(tmp_trans_hist.shape[0] == 0):
@@ -380,7 +380,7 @@ class SignalsBacktester:
             plt.savefig(img, format='png')
             img.seek(0)
             plt.close()
-            print("End Hi World",flush=True)
+            # print("End Hi World",flush=True)
         
             # print(img.getvalue())
             return img
