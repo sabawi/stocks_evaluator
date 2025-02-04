@@ -1,10 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# # IMPORTING PACKAGES
-
-# In[394]:
-
 
 import pandas as pd
 import numpy as np
@@ -35,13 +28,7 @@ def suppress_warnings(func):
 # In[395]:
 
 def get_historical_data(symbol, start_date):
-    # return yf.download(
-    #     symbol,
-    #     start=start_date,
-    #     end=datetime.now(),
-    #     interval='1d',
-    #     progress=False,
-    # )
+
     df = yf.Ticker(symbol).history(interval="1d", start=start_date, end=datetime.now())
     return df
 
@@ -66,11 +53,6 @@ def get_time_difference(past_date):
 
     return years, months, weeks, days
 
-
-
-# # SUPERTREND CALCULATION
-
-# In[396]:
 
 @suppress_warnings
 def get_supertrend(high, low, close, lookback, multiplier):
@@ -161,11 +143,6 @@ def get_supertrend(high, low, close, lookback, multiplier):
     return st, upt, dt
 
 
-# # SUPERTREND STRATEGY
-
-# In[397]:
-
-
 @suppress_warnings
 def implement_st_strategy(prices, st):
     buy_price = []
@@ -220,39 +197,6 @@ def supertrend(stock,start_date):
 
     buy_price, sell_price, st_signal = implement_st_strategy(stock_data['Close'], stock_data['st'])
 
-
-    # # SUPERTREND PLOT
-
-    # In[399]:
-
-
-    # plt.plot(stock_data['Close'], linewidth = 2, label = 'CLOSING PRICE')
-    # plt.plot(stock_data['st'], color = 'green', linewidth = 2, label = 'ST UPTREND 10,3')
-    # plt.plot(stock_data['st_dt'], color = 'r', linewidth = 2, label = 'ST DOWNTREND 10,3')
-    # plt.legend(loc = 'upper left')
-    # plt.show()
-
-
-    # # # SUPERTREND SIGNALS
-
-    # # In[400]:
-
-
-    # plt.plot(stock_data['Close'], linewidth = 2)
-    # plt.plot(stock_data['st'], color = 'green', linewidth = 2, label = 'ST UPTREND')
-    # plt.plot(stock_data['st_dt'], color = 'r', linewidth = 2, label = 'ST DOWNTREND')
-    # plt.plot(stock_data.index, buy_price, marker = '^', color = 'green', markersize = 12, linewidth = 0, label = 'BUY SIGNAL')
-    # plt.plot(stock_data.index, sell_price, marker = 'v', color = 'r', markersize = 12, linewidth = 0, label = 'SELL SIGNAL')
-    # plt.title(stock+' SUPERTREND TRADING SIGNALS')
-    # plt.legend(loc = 'upper left')
-    # plt.show()
-
-
-    # # GENERATING STOCK POSITION
-
-    # In[401]:
-
-
     position = []
     for i in range(len(st_signal)):
         if st_signal[i] > 1:
@@ -276,9 +220,8 @@ def supertrend(stock,start_date):
     frames = [close_price, st, st_signal, position]
     strategy = pd.concat(frames, join = 'inner', axis = 1)
 
-    # print(stock+" Last Price is $"+str(np.round(close_price[-1],2))+" on "+close_price.index[-1].strftime("%Y-%m-%d"))
-    # print(stock+' Signals from '+str(start_date)+ ' to '+datetime.now().strftime("%Y-%m-%d")+' :')
     only_buysell_signals_df = pd.DataFrame(columns=["Date","Buy_Sell","Close_Price"])
+    
     # print(strategy)
     # for index, row in st_signal.iterrows():
     for index, row in strategy[strategy['st_signal'] != 0].iterrows():
@@ -292,23 +235,12 @@ def supertrend(stock,start_date):
 
             dic = {"Date": [index.strftime("%Y-%m-%d")], "Buy_Sell": [buysell], "Close_Price": [row['Close']]}
             tmp_df = pd.DataFrame(dic)
-            only_buysell_signals_df=pd.concat([only_buysell_signals_df,tmp_df])
+            # only_buysell_signals_df=pd.concat([only_buysell_signals_df,tmp_df])
+            only_buysell_signals_df = pd.concat([only_buysell_signals_df,tmp_df], ignore_index=True, sort=False)
     only_buysell_signals_df.set_index("Date",inplace=True)
     past_date = only_buysell_signals_df.index[-1]
     styears, stmonths, stweeks, stdays = get_time_difference(past_date)
 
-    # print(only_buysell_signals_df)
-    # print('Number of Signals =',len(only_buysell_signals_df))
-
-    # print('---- End Signals ----')
-
-    # # print(strategy[20:25])
-    # print(strategy[strategy['st_signal'] != 0])
-
-
-    # # BACKTESTING
-
-    # In[402]:
 
     if only_buysell_signals_df.iloc[-1].Buy_Sell == 'Buy':
         last_signal = 'Buy'
@@ -320,34 +252,31 @@ def supertrend(stock,start_date):
     st_strategy_ret = []
 
     for i in range(len(stock_ret)):
-        returns = stock_ret['returns'][i]*strategy['st_position'][i]
+        returns = stock_ret['returns'][i]*strategy['st_position'].iloc[i]
         st_strategy_ret.append(returns)
         
     st_strategy_ret_df = pd.DataFrame(st_strategy_ret).rename(columns = {0:'st_returns'})
     investment_value = 100000
-    number_of_stocks = floor(investment_value/stock_data['Close'][-1])
+    number_of_stocks = floor(investment_value/stock_data['Close'].iloc[-1])
     st_investment_ret = []
 
     for i in range(len(st_strategy_ret_df['st_returns'])):
-        returns = number_of_stocks*st_strategy_ret_df['st_returns'][i]
+        returns = number_of_stocks*st_strategy_ret_df['st_returns'].iloc[i]
         st_investment_ret.append(returns)
 
     st_investment_ret_df = pd.DataFrame(st_investment_ret).rename(columns = {0:'investment_returns'})
     total_investment_ret = round(sum(st_investment_ret_df['investment_returns']), 2)
     profit_percentage = floor((total_investment_ret/investment_value)*100)
-    # print(cl('Profit gained from the ST strategy by investing $100k in '+stock+' : {}'.format(total_investment_ret), attrs = ['bold']))
-    # print(cl('Profit percentage of the ST strategy : {}%'.format(profit_percentage), attrs = ['bold']))
-    # SPY ETF COMPARISON
     def get_benchmark(start_date, investment_value):
         spy = get_historical_data('SPY', start_date)['Close']
         benchmark = pd.DataFrame(np.diff(spy)).rename(columns = {0:'benchmark_returns'})
         
         investment_value = investment_value
-        number_of_stocks = floor(investment_value/spy[-1])
+        number_of_stocks = floor(investment_value/spy.iloc[-1])
         benchmark_investment_ret = []
         
         for i in range(len(benchmark['benchmark_returns'])):
-            returns = number_of_stocks*benchmark['benchmark_returns'][i]
+            returns = number_of_stocks*benchmark['benchmark_returns'].iloc[i]
             benchmark_investment_ret.append(returns)
 
         benchmark_investment_ret_df = pd.DataFrame(benchmark_investment_ret).rename(columns = {0:'investment_returns'})
@@ -357,10 +286,6 @@ def supertrend(stock,start_date):
     investment_value = 100000
     total_benchmark_investment_ret = round(sum(benchmark['investment_returns']), 2)
     benchmark_profit_percentage = floor((total_benchmark_investment_ret/investment_value)*100)
-    # print(cl('Benchmark (buy & hold) profit by investing $100k : {}'.format(total_benchmark_investment_ret), attrs = ['bold']))
-    # print(cl('Benchmark (buy & hold) Profit percentage : {}%'.format(benchmark_profit_percentage), attrs = ['bold']))
-    # print(cl('ST Strategy profit is {}% higher than the Benchmark Profit'.format(profit_percentage - benchmark_profit_percentage), attrs = ['bold']))
-    # print(    cl('\n*****************************************************************', attrs=['bold']))
     winner_strategy = False
     if(profit_percentage - benchmark_profit_percentage > 0.0):
         winner_strategy = True
@@ -372,9 +297,6 @@ def supertrend(stock,start_date):
             if not file_exists:
                 myfile.write("Date_Checked,stock,Percent_Above_SPY\n")
             myfile.write(f"{datetime.today().strftime('%Y-%m-%d')},{stock.upper()},{str(profit_percentage - benchmark_profit_percentage)}\n")
-    # elif(profit_percentage - benchmark_profit_percentage <= 0.0):
-    #     print(cl('                         LOSING STRATEGY                         ', attrs=['bold']))
-    # print(    cl('*****************************************************************', attrs=['bold']))
 
     return winner_strategy, last_signal, last_signal_date, round(stock_data.iloc[-1].Close,2), stock_data, stdays
 
