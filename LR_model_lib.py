@@ -41,7 +41,10 @@ def create_model(stock):
     df = df_in.copy()
 
     # Drop all the columns not relevant for the daily predictions
-    df = df.drop(columns=['Open','High','Low','Adj Close','Volume'])
+    if 'Adj Close' in df.columns:
+        df = df.drop(columns=['Open','High','Low','Adj Close','Volume'])
+    else:
+        df = df.drop(columns=['Open','High','Low','Volume'])
 
     # Create a 'Returns' column for the % changes in price and add it to Dataframe
     df['ret'] = df['Close'].pct_change()   
@@ -287,7 +290,11 @@ def create_model(stock):
     df_pred = create_lagged_features(df_pred, lag_depth) # Create the Lagged columns for the past 5 days
 
     # df_pred.drop(columns=['Target'],inplace=True)
-    df_pred = df_pred.drop(columns=['Open','High','Low','Adj Close','Volume']) # Remove non-feature columns
+    if 'Adj Close' in df_pred.columns:
+        df_pred = df_pred.drop(columns=['Open','High','Low','Adj Close','Volume'])
+    else:
+        df_pred = df_pred.drop(columns=['Open','High','Low','Volume'])
+
     if 'Predicted' in df_pred.columns:
         df_pred = df_pred.drop('Predicted') # Remove the predicted column in case its leftover from previous runs
     df_pred.tail(5)
@@ -442,8 +449,12 @@ def create_model(stock):
 
     # In[358]:
 
+    if 'Adj Close' in df_pred.columns:
+        df_pred = df_pred.drop(columns=['Open','High','Low','Adj Close','Volume'])
+    else:
+        df_pred = df_pred.drop(columns=['Open','High','Low','Volume'])
 
-    df_pred = df_pred.drop(columns=['Open','High','Low','Adj Close','Volume'])
+
     df_pred
 
 

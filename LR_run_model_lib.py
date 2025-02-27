@@ -79,7 +79,11 @@ def get_recommendation(stock,lookback):
     df_lagged = create_lagged_features(df_in_delta,lag_depth)
 
     # Remove the non-features from the Dataset
-    df_lagged = df_lagged.drop(['Open','High','Low','Close','Adj Close','Volume'],axis=1)
+    if 'Adj Close' in df_lagged:
+        df_lagged = df_lagged.drop(['Open','High','Low','Close','Adj Close','Volume'],axis=1)
+    else:
+        df_lagged = df_lagged.drop(['Open','High','Low','Close','Volume'],axis=1)
+
     recomm_list = []
 
     for j in [1,2]:

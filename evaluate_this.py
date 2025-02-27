@@ -599,23 +599,26 @@ def first_date_N_years_ago(years):
 
 # %%
 def load_sp500_list():
-    stocks_list_csv = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+    stocks_list_url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
     sp_df = pd.DataFrame()
     
     try:
-        wiki_data=pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies') # Open the link and download S&P company details in a table
+        wiki_data = pd.read_html(stocks_list_url) # Open the link and download S&P company details in a table
         data = wiki_data[0] # All data is stored in first cell
-        sp_df = data.sort_values(by=['Symbol'], ascending=True) # Sort the dataframe on ticker in alphabetical ascending order
-    except:
-        print("Cannot open file", stocks_list_csv,flush=True)
-
-    # remove the dotted symbols, they are redundant 
-    no_dot_symbols = [i for i in sp_df['Symbol'] if i.find('.')==-1]
-    sp_df = sp_df[sp_df['Symbol'].isin(no_dot_symbols)]
+        sp_df = data.sort_values(by=['Symbol'], ascending=True) # Sort the dataframe on ticker in alphabetical order
+        
+        # remove the dotted symbols, they are redundant 
+        no_dot_symbols = [i for i in sp_df['Symbol'] if i.find('.')==-1]
+        sp_df = sp_df[sp_df['Symbol'].isin(no_dot_symbols)]
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        print(f"Cannot open file {stocks_list_url}", flush=True)
+        # Return default values to indicate failure
+        return 0, 0, pd.DataFrame()
     
     # returns count_row, count_col, df
     return sp_df.shape[0], sp_df.shape[1], sp_df
-
 
 # %%
 m,n,sp_df = load_sp500_list()
@@ -680,8 +683,18 @@ def recommendation_table(eval_df,stock_list, lookback_years=1, sma_fast=40, sma_
             print(f"{s} data not found. Skipping!",end=",",flush=True)
             continue
         
-        ema_last_date,ema_trend, df_trend_pdta, ema_buy_days = ema_trend_ind.calculate_pdta_alphatrend(stock=s,df=stock_data,Fast_EMA=ema_trend_fast,
-                                                                                      Slow_EMA=ema_trend_slow,Lookback=ema_trend_lookback)
+        # ema_last_date,ema_trend, df_trend_pdta, ema_buy_days = ema_trend_ind.calculate_pdta_alphatrend(stock=s,df=stock_data,Fast_EMA=ema_trend_fast,
+        #                                                                               Slow_EMA=ema_trend_slow,Lookback=ema_trend_lookback)
+        
+
+        ema_last_date, ema_trend, df_trend_pdta, ema_buy_days = ema_trend_ind.calculate_pdta_alphatrend(
+            stock=s,
+            df=stock_data,
+            fast_ema=ema_trend_fast,  # Changed from Fast_EMA
+            slow_ema=ema_trend_slow,  # Changed from Slow_EMA
+            lookback=ema_trend_lookback   # Changed from Lookback, assuming this exists
+)
+        
         df_trend_pdta = ema_lib.generate_signals(df_trend_pdta,fast_ema=ema_trend_fast,slow_ema=ema_trend_slow)
         df_trend_pdta = ema_trend_ind.get_momentum_indicators(df_trend_pdta)
         # print(df_trend_pdta[['Buy_Sell_Signal','Mom_Signal']])
@@ -777,7 +790,12 @@ def recommend_selling_strategy(lookback_years,stock_list,multiple_of_std_dev):
 
 
     for s in stock_list:
-        winner,buysell,buysell_date,close_price,stock_data, days_at_ST = run_supertrend(s,start_date)
+        try:
+            winner,buysell,buysell_date,close_price,stock_data, days_at_ST = run_supertrend(s,start_date)
+        except Exception as e:
+            print(f"Exception '{e}'in function call run_supertrend({s},{start_date}) will ignore and continue ...")
+            continue
+        
         if(len(stock_data)<2):
             print(f"{s.upper()} data not found. Skipping!",end=",",flush=True)
             continue

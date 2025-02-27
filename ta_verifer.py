@@ -1,5 +1,5 @@
 import pandas as pd
-import pandas_ta as pdta
+# import pandas_ta as pdta
 import ta
 import numpy as np
 import yfinance as yf
@@ -169,12 +169,12 @@ def calculate_talib_alphatrend(df):
 
 
 ####################### Using Pandas TA library ##########################
-def calculate_pdta_alphatrend(stock,df,Fast_EMA,Slow_EMA, Lookback):
+def calculate_pdta_alphatrend_old(stock,df,Fast_EMA,Slow_EMA, Lookback):
     
     # Calculate the Alpha Trend (AMAT) indicator
     try:
         alpha_trend = pdta.amat(df['Close'], fast=Fast_EMA, slow=Slow_EMA,lookback=Lookback)
-    except BaseException as error:
+    except Exception as error:
         print(f"****ERROR: Fatal error {error} encountered while call ta.amat() function. Exiting!")
         quit()
         
@@ -216,44 +216,94 @@ def calculate_pdta_alphatrend(stock,df,Fast_EMA,Slow_EMA, Lookback):
         
     return last_date, current_recommendation, df, consecutive_buy_days
     
+def calculate_pdta_alphatrend(stock, df, fast_ema, slow_ema, lookback):
+    return calculate_ama_trend(stock, df, fast_ema, slow_ema, lookback)
+    
+def calculate_ama_trend(stock, df, fast_ema, slow_ema, lookback):
+    fast_ma = df['Close'].ewm(span=fast_ema, adjust=False).mean()
+    slow_ma = df['Close'].ewm(span=slow_ema, adjust=False).mean()
+    long_run = (fast_ma > slow_ma).rolling(lookback).mean().fillna(0)
+    short_run = (fast_ma < slow_ma).rolling(lookback).mean().fillna(0)
+    alpha_trend = pd.concat([long_run, short_run], axis=1)
+    amat_lr_column = f"AMATe_LR_{fast_ema}_{slow_ema}_{lookback}"
+    amat_sr_column = f"AMATe_SR_{fast_ema}_{slow_ema}_{lookback}"
+    alpha_trend.columns = [amat_lr_column, amat_sr_column]
+    df = pd.concat([df, alpha_trend], axis=1)
+    df['Buy_Sell_Signal'] = df[amat_lr_column]
+    consecutive_buy_days = 0
+    last_date = df.index[-1]
+    if df.loc[last_date, 'Buy_Sell_Signal'] == 1:
+        current_recommendation = 'Buy'
+        for date in reversed(df.index):
+            if df.loc[date, 'Buy_Sell_Signal'] == 1:
+                consecutive_buy_days += 1
+            else:
+                break
+    else:
+        current_recommendation = 'Sell'
+        consecutive_buy_days = -1
+    return last_date, current_recommendation, df, consecutive_buy_days
+
+import pandas as pd
+import numpy as np
+
+def ema(data, window):
+    return data.ewm(span=window, adjust=False).mean()
+
+def macd(close, window_fast=12, window_slow=26, window_sign=9):
+    ema_fast = ema(close, window_fast)
+    ema_slow = ema(close, window_slow)
+    macd_line = ema_fast - ema_slow
+    signal_line = ema(macd_line, window_sign)
+    histogram = macd_line - signal_line
+    return macd_line, signal_line, histogram
+
+def rsi(data, window=14):
+    delta = data.diff()
+    gains = delta.where(delta > 0, 0)
+    losses = -delta.where(delta < 0, 0)
+    avg_gain = gains.rolling(window).mean()
+    avg_loss = losses.rolling(window).mean()
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+def bollinger_bands(data, window=20, std=2):
+    mean = data.rolling(window).mean()
+    std_dev = data.rolling(window).std()
+    lower_band = mean - std * std_dev
+    upper_band = mean + std * std_dev
+    return lower_band, upper_band
+
 def get_momentum_indicators(df):
-
     data = df.copy()
-
-    # Ensure the data is sorted by date
     data = data.sort_values(by='Date')
 
     # Calculate MACD
-    macd = data.ta.macd(close='Close', fast=12, slow=26, signal=9, append=True)
+    macd_line, signal_line, histogram = macd(data['Close'], 12, 26, 9)
+    data['MACD_12_26_9'] = macd_line
+    data['MACDs_12_26_9'] = signal_line
+    data['MACDh_12_26_9'] = histogram
 
     # Calculate RSI
-    data['RSI'] = pdta.rsi(data['Close'], length=14)
+    data['RSI'] = rsi(data['Close'], 14)
 
     # Calculate Bollinger Bands
-    bbands = data.ta.bbands(close='Close', length=20, std=2, append=True)
+    lower_band, upper_band = bollinger_bands(data['Close'], 20, 2)
+    data['BBL_20_2.0'] = lower_band
+    data['BBU_20_2.0'] = upper_band
 
     # Define Buy/Sell Conditions
-
-    # Buy Signal:
-    # - MACD line crosses above the signal line
-    # - RSI exits oversold territory (rises above 30)
-    # - Closing price crosses above the lower Bollinger Band
-
     data['Buy_Signal'] = (
-        (data['MACD_12_26_9'] > data['MACDs_12_26_9']) & # MACD crossover
-        (data['RSI'] > 30) & # RSI exits oversold
-        (data['Close'] > data['BBL_20_2.0']) # Close above lower Bollinger Band
+        (data['MACD_12_26_9'] > data['MACDs_12_26_9']) &
+        (data['RSI'] > 30) &
+        (data['Close'] > data['BBL_20_2.0'])
     )
 
-    # Sell Signal:
-    # - MACD line crosses below the signal line
-    # - RSI exits overbought territory (falls below 70)
-    # - Closing price crosses below the upper Bollinger Band
-
     data['Sell_Signal'] = (
-        (data['MACD_12_26_9'] < data['MACDs_12_26_9']) & # MACD crossover
-        (data['RSI'] < 70) & # RSI exits overbought
-        (data['Close'] < data['BBU_20_2.0']) # Close below upper Bollinger Band
+        (data['MACD_12_26_9'] < data['MACDs_12_26_9']) &
+        (data['RSI'] < 70) &
+        (data['Close'] < data['BBU_20_2.0'])
     )
 
     # Combine Buy and Sell signals into a single column
@@ -261,11 +311,7 @@ def get_momentum_indicators(df):
     data.loc[data['Buy_Signal'], 'Mom_Signal'] = 1  # Buy signal
     data.loc[data['Sell_Signal'], 'Mom_Signal'] = 0  # Sell signal
 
-    # Display the resulting DataFrame with signals
-    # return data[['Close', 'MACD_12_26_9', 'MACDs_12_26_9', 'RSI', 'BBL_20_2.0', 'BBU_20_2.0', 'signal']]
     return data
-
-
 
 def plot_ta_alphatrend(df,stock,image_only = False,fast_ema=20,slow_ema=40):
     # in : df should contain 'Close' price column and a 'Buy_Sell_Signal' column and indexed by Date
